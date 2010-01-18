@@ -24,6 +24,8 @@ static int memcached_deny_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
         pr_log_pri(PR_LOG_ERR, "%s: Out of memory", MODULE_NAME);
+        /* todo */
+        abort();
     }
     return 0;
 }
