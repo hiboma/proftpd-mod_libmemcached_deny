@@ -1,0 +1,48 @@
+------------------
+Build Requirements
+------------------
+
+        o DSO supported proftpd ( ./configure --enable-dso )
+        o libmemcached
+
+-------------------------
+Installation Instructions
+-------------------------
+        
+1.  build && install
+
+       $ sudo /path/to/proftpd/bin/prxs -c mod_libmemcached_deny.c -l=memcached -L=/path/to/lib -i 
+
+2.  edit proftpd.conf
+
+       LoadModule mod_libmemcached_deny.c
+       LibMemcachedDenyServer 127.0.0.11.1
+
+3.  start proftpd
+
+       # not daemonize && print debug message
+       $ /path/to/proftpd/sbin/proftpd --nodaemon -d10       
+
+4.  try to login ( will fail )
+
+       $ ftp localhost
+
+5.  start memcached
+
+       # with debug print 
+       $ memcached -vv
+
+6.  set cache
+
+       # use your favoire client ...
+       $ telnet localhost 11211                                                                           
+       Trying 127.0.0.1...
+       Connected to localhost.
+       Escape character is '^]'.
+       set hiroya@127.0.0.1 0 0 9
+       127.0.0.1
+       STORED
+
+7.  try to login ( will success )
+
+       $ ftp localhost
