@@ -25,7 +25,6 @@ static int libmemcached_deny_init(void) {
         /* todo */
         abort();
     }
-    return 1;
     return 0;
 }
 
