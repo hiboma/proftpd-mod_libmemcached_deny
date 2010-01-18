@@ -43,6 +43,8 @@ Installation Instructions
        127.0.0.1
        STORED
 
+       # now 'hiroya@127.0.0.1' can login FTP server(127.0.0.1)
+
 7.  try to login ( will success )
 
        $ ftp localhost
