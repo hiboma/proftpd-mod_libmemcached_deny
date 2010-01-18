@@ -9,7 +9,7 @@
 #define _DEFAULT_POOL_SIZE_MAX 10
 #define _MAX_KEY_LENGTH 100
 
-static const char * const MODULE_NAME = "mod_memcached_deny";
+static const char * const MODULE_NAME = "mod_libmemcached_deny";
 
 /* ro */
 static const int MAX_KEY_LENGTH = _MAX_KEY_LENGTH;
@@ -20,7 +20,7 @@ static const int POOL_SIZE_MAX  = _DEFAULT_POOL_SIZE_MAX;
 static bool is_set_server = false;
 static memcached_st *memcached_deny_mmc = NULL;
 
-static int memcached_deny_init(void) {
+static int libmemcached_deny_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
         pr_log_pri(PR_LOG_ERR, "%s: Out of memory", MODULE_NAME);
@@ -52,7 +52,7 @@ MODRET set_memcached_deny_server(cmd_rec *cmd) {
     return PR_HANDLED(cmd);
 }
 
-static bool memcached_deny_cache_exits(memcached_st *mmc,
+static bool libmemcached_deny_cache_exits(memcached_st *mmc,
                                        const char *key,
                                        const char *local_ip) {
     memcached_return rc;
@@ -138,7 +138,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     // todo
     snprintf(key, MAX_KEY_LENGTH, "%s@%s", account, remote_ip);
 
-    if(memcached_deny_cache_exits(memcached_deny_mmc, key, local_ip) == false) {
+    if(libmemcached_deny_cache_exits(memcached_deny_mmc, key, local_ip) == false) {
         pr_log_auth(PR_LOG_NOTICE, "%s: cache not found for '%s'. Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
         end_login(0);
@@ -147,23 +147,23 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
 }
 
-static conftable memcached_deny_conftab[] = {
-  { "MemcachedDenyServer",		set_memcached_deny_server,		NULL },
+static conftable libmemcached_deny_conftab[] = {
+  { "LibMemcachedDenyServer",		set_memcached_deny_server,		NULL },
   { NULL }
 };
  
-static cmdtable memcached_deny_cmdtab[] = {
+static cmdtable libmemcached_deny_cmdtab[] = {
   { POST_CMD, C_USER,	G_NONE,	 memcached_deny_post_pass,	FALSE,	FALSE, CL_AUTH },
   { 0, NULL }
 };
  
-module memcached_deny_module = {
+module libmemcached_deny_module = {
   NULL, NULL,
   0x20,                    /* Module API version */
-  "memcached_deny", /* Module name */
-  memcached_deny_conftab,
-  memcached_deny_cmdtab,      /* Module command handler table */
+  "libmemcached_deny", /* Module name */
+  libmemcached_deny_conftab,
+  libmemcached_deny_cmdtab,      /* Module command handler table */
   NULL,             /* Module authentication handler table */
-  memcached_deny_init , /* Module initialization function */
+  libmemcached_deny_init , /* Module initialization function */
   NULL, // autoperm_sess_init  /* Session initialization function */
 };
