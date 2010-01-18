@@ -51,15 +51,26 @@ MODRET set_memcached_deny_server(cmd_rec *cmd) {
     return PR_HANDLED(cmd);
 }
 
+/* todo */
+static int libmemcached_deny_timeout_callback(CALLBACK_FRAME) {
+    pr_log_auth(PR_LOG_WARNING,
+                "%s: memcached timeout", MODULE_NAME);
+    return 0;
+}
+
 static bool libmemcached_deny_cache_exits(memcached_st *mmc,
                                        const char *key,
                                        const char *local_ip) {
+    int timer_id;
     memcached_return rc;
     const char *cached_ip;
     size_t value_len;
     uint32_t flag;
 
+    /* todo */
+    timer_id = pr_timer_add(1, -1, NULL, libmemcached_deny_timeout_callback, "memcached_get");
     cached_ip = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
+    pr_timer_remove(timer_id, NULL);
 
     /* on failed connect to memcached */
     if(MEMCACHED_SUCCESS != rc) {
