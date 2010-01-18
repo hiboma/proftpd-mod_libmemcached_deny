@@ -21,9 +21,8 @@ static memcached_st *memcached_deny_mmc = NULL;
 static int libmemcached_deny_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
-        pr_log_pri(PR_LOG_ERR, "%s: Out of memory", MODULE_NAME);
-        /* todo */
-        abort();
+        pr_log_pri(PR_LOG_ERR, "Fatal %s: Out of memory", MODULE_NAME);
+        exit(1);
     }
     return 0;
 }
@@ -31,19 +30,21 @@ static int libmemcached_deny_init(void) {
 MODRET set_memcached_deny_server(cmd_rec *cmd) {
     memcached_return rc;
     memcached_server_st *server = NULL;
-    
+
     /* cmd is SetAutoperm <perm> <regex_str> */
     if (cmd->argc-1 != 1)
         CONF_ERROR(cmd, "wrong number of parameters");
-    
+
     /* check command context */
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
-    
+
     server = memcached_servers_parse((char *)cmd->argv[1]);
     rc = memcached_server_push(memcached_deny_mmc, server);
     if(!rc == MEMCACHED_SUCCESS){
-        /* todo */
-        abort();
+        pr_log_auth(PR_LOG_ERR,
+                   "Fatal %s: failed memcached_strerror(): %s",
+                    MODULE_NAME, memcached_strerror(memcached_deny_mmc, rc));
+        exit(1);
     }
     pr_log_debug(DEBUG2,
                  "%s: add memcached server %s", MODULE_NAME, (char *)cmd->argv[1]);
