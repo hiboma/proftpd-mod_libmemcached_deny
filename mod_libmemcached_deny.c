@@ -65,7 +65,7 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     if(MEMCACHED_SUCCESS != rc) {
         pr_log_auth(PR_LOG_ERR,
                     "%s: failed memcached_get()",
-                    MODULE_NAME, memcached_strerror(memc, rc));
+                    MODULE_NAME, memcached_strerror(mmc, rc));
         return false;
     }
 
