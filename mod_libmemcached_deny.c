@@ -4,17 +4,15 @@
 #include "libmemcached/memcached_util.h"
 
 #include <stdbool.h>
-
-#define _DEFAULT_POOL_SIZE_MIN 5
-#define _DEFAULT_POOL_SIZE_MAX 10
-#define _MAX_KEY_LENGTH 100
+#include <utmp.h>
 
 static const char * const MODULE_NAME = "mod_libmemcached_deny";
 
+/* max account length + max IP length (255.255.255.255) + \0 */
+#define _MAX_KEY_LENGTH UT_NAMESIZE + 15 + 1;
+
 /* ro */
 static const int MAX_KEY_LENGTH = _MAX_KEY_LENGTH;
-static const int POOL_SIZE_MIN  = _DEFAULT_POOL_SIZE_MIN;
-static const int POOL_SIZE_MAX  = _DEFAULT_POOL_SIZE_MAX;
 
 /* rw */
 static bool is_set_server = false;
@@ -47,7 +45,8 @@ MODRET set_memcached_deny_server(cmd_rec *cmd) {
         /* todo */
         abort();
     }
-    pr_log_debug(DEBUG2, "%s: add memcached server %s", MODULE_NAME, (char *)cmd->argv[1]);
+    pr_log_debug(DEBUG2,
+                 "%s: add memcached server %s", MODULE_NAME, (char *)cmd->argv[1]);
     is_set_server = true;
     return PR_HANDLED(cmd);
 }
@@ -59,12 +58,16 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     const char *cached_ip;
     size_t value_len;
     uint32_t flag;
-    
+
     cached_ip = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
 
     /* on failed connect to memcached */
-    if(MEMCACHED_SUCCESS != rc)
+    if(MEMCACHED_SUCCESS != rc) {
+        pr_log_auth(PR_LOG_ERR,
+                    "%s: failed memcached_get()",
+                    MODULE_NAME, memcached_strerror(memc, rc));
         return false;
+    }
 
     /* cache not fond */
     if(NULL == cached_ip)
@@ -117,6 +120,15 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
+/*      /\* Format string attack *\/ */
+/*     if(NULL != strchr(account, '%')) { */
+/*         pr_log_auth(PR_LOG_ERR, */
+/*                     "%s: '%s' account name contains invalid character ''", */
+/*                     MODULE_NAME, account); */
+/*         pr_response_send(R_530, _("Login denyied")); */
+/*         end_login(0); */
+/*     } */
+
     remote_netaddr = pr_netaddr_get_sess_remote_addr();
     if(NULL == remote_netaddr) {
         pr_log_auth(PR_LOG_ERR, "%s: pr_netaddr_t not found. something fatal", MODULE_NAME);
@@ -133,17 +145,24 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     remote_ip = pr_netaddr_get_ipstr(remote_netaddr);
     local_ip  = pr_netaddr_get_ipstr(local_net_addr);
-    pr_log_debug(DEBUG2, "%s::%s(): called for %s",MODULE_NAME,  __FUNCTION__, remote_ip);
 
-    // todo
-    snprintf(key, MAX_KEY_LENGTH, "%s@%s", account, remote_ip);
+    if(snprintf(key, MAX_KEY_LENGTH, "%s@%s", account, remote_ip) < 0) {
+        pr_log_auth(PR_LOG_NOTICE,
+                    "%s: oops, snprintf() failed %s", MODULE_NAME, strerror(errno));
+        pr_response_send(R_530, _("Login denyied (server error)"));
+        end_login(0);
+    }
 
     if(libmemcached_deny_cache_exits(memcached_deny_mmc, key, local_ip) == false) {
-        pr_log_auth(PR_LOG_NOTICE, "%s: cache not found for '%s'. Denied", MODULE_NAME, key);
+        pr_log_auth(PR_LOG_NOTICE,
+                    "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
         end_login(0);
     }
-    pr_log_debug(DEBUG2, "%s::%s(): cache found. '%s' allowd to auth", MODULE_NAME, __FUNCTION__, key);
+
+    pr_log_debug(DEBUG2,
+                 "%s::%s(): cache found. '%s' allowd to auth", MODULE_NAME, __FUNCTION__, key);
+
     return PR_DECLINED(cmd);
 }
 
