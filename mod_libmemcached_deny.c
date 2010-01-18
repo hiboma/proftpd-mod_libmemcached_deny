@@ -25,6 +25,7 @@ static int libmemcached_deny_init(void) {
         /* todo */
         abort();
     }
+    return 1;
     return 0;
 }
 
@@ -64,7 +65,7 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     /* on failed connect to memcached */
     if(MEMCACHED_SUCCESS != rc) {
         pr_log_auth(PR_LOG_ERR,
-                    "%s: failed memcached_get()",
+                    "%s: failed memcached_get() %s",
                     MODULE_NAME, memcached_strerror(mmc, rc));
         return false;
     }
