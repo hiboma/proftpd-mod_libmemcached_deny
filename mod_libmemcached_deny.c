@@ -145,11 +145,8 @@ static bool is_allowed_ip(const char *remote_ip) {
     pr_table_t *allowed_ips;
 
     c = find_config(CURRENT_CONF, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
-    if(NULL == c) { 
-        pr_log_auth(PR_LOG_ERR,
-                    "%s: config_rec is NULL. something fatal", MODULE_NAME);
+    if(NULL == c)
         return false;
-    }
 
     allowed_ips = c->argv[0];
     if(NULL == allowed_ips) {
