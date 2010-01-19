@@ -43,23 +43,37 @@ MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
     pr_table_t *allowed_ips;
 
     /* check command context */
-    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL|CONF_VIRTUAL);
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
     c = find_config(main_server->conf, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
     if(c && c->argv[0]) {
         allowed_ips = c->argv[0];
     } else {
-        allowed_ips = pr_table_alloc(main_server->pool, 0);
         c = add_config_param(cmd->argv[0], 0, NULL);
-        c->argv[0] = allowed_ips;
+        c->argv[0] = allowed_ips = pr_table_alloc(main_server->pool, 0);
     }
 
     for(i=1; i < cmd->argc; i++) {
-        const char *allowed_ip = cmd->argv[i];
-        pr_table_add_dup(allowed_ips, allowed_ip, "y", 1);
+        /*
+         *ここでpstrdupしておかないと、１度ログインするとpoolに回収され
+         * allowed_ipsのキー一覧 から消えてバグの元になる
+         */
+        const char *ip = pstrdup(main_server->pool, cmd->argv[i]);
+        if(pr_table_exists(allowed_ips, ip) > 0) {
+            pr_log_debug(DEBUG2,
+                         "%s: %s is already registerd", MODULE_NAME, ip);
+            continue;
+        }
+
+        if(pr_table_add_dup(allowed_ips, ip, "y", 0) < 0){
+            pr_log_pri(PR_LOG_ERR,
+                       "%s: failed pr_table_add_dup(): %s",
+                       MODULE_NAME, strerror(errno));
+            exit(1);
+        }
         pr_log_debug(DEBUG2,
-                     "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, allowed_ip);
+                     "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, ip);
     }
 
     return PR_HANDLED(cmd);
@@ -72,7 +86,7 @@ MODRET set_memcached_deny_server(cmd_rec *cmd) {
     memcached_server_st *server = NULL;
 
     /* check command context */
-    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL|CONF_VIRTUAL);
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* NOTICE: i = 1 */
     for(i=1; i < cmd->argc; i++) {
@@ -154,7 +168,7 @@ static bool is_allowed_ip(const char *remote_ip) {
     config_rec *c;
     pr_table_t *allowed_ips;
 
-    c = find_config(CURRENT_CONF, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
+    c = find_config(main_server->conf, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
     if(NULL == c)
         return false;
 
