@@ -89,9 +89,13 @@ static int libmemcached_deny_timeout_callback(CALLBACK_FRAME) {
     return 0;
 }
 
+/*
+ * memcached has
+ *     <account>@<proftpd IP> : <client IP>
+ */
 static bool libmemcached_deny_cache_exits(memcached_st *mmc,
                                        const char *key,
-                                       const char *local_ip) {
+                                       const char *remote_ip) {
     int timer_id;
     memcached_return rc;
     const char *cached_ip;
@@ -124,11 +128,11 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     if(0 == value_len)
         return false;
 
-    /* compare memacched IP with local IP(proftpd's host) */
-    if(0 != strcmp(cached_ip, local_ip)) {
+    /* compare memacched IP with client IP */
+    if(0 != strcmp(cached_ip, remote_ip)) {
         pr_log_debug(DEBUG2,
-                    "%s: memcached IP '%s' not matched with local IP '%s' ",
-                    MODULE_NAME,  cached_ip, local_ip);
+                    "%s: memcached IP '%s' not matched with remote IP '%s' ",
+                    MODULE_NAME,  cached_ip, remote_ip);
         return false;
     }
 
@@ -212,7 +216,8 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         return PR_DECLINED(cmd);
     }
 
-    key = pstrcat(cmd->tmp_pool, account, "@", remote_ip, NULL);
+    /* key is <account>@<proftpd IP> */
+    key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
     if(!key) { 
         pr_log_auth(PR_LOG_NOTICE,
                     "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
@@ -220,7 +225,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
-    if(libmemcached_deny_cache_exits(memcached_deny_mmc, key, local_ip) == false) {
+    if(libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip) == false) {
         pr_log_auth(PR_LOG_NOTICE,
                     "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
