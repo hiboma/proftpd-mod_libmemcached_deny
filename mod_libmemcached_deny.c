@@ -136,7 +136,7 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
         return false;
     }
 
-    pr_log_debug(DEBUG2, "%s: not matched witsh Allowed IPs", MODULE_NAME);
+    pr_log_debug(DEBUG2, "%s: not matched with Allowed IPs", MODULE_NAME);
     return true;
 }
 
