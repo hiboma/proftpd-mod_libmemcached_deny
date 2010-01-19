@@ -29,38 +29,25 @@ static int libmemcached_deny_init(void) {
 
 MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
     config_rec *c;
-    array_header *allowed_ips = NULL;
-    char **argv;
-    int argc;
     int i;
+    pr_table_t *allowed_ips;
 
     /* check command context */
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL|CONF_VIRTUAL);
 
     /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
-    argv = cmd->argv;
-    argc = cmd->argc -1;
-
     c = find_config(main_server->conf, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
     if(c && c->argv[0]) {
         allowed_ips = c->argv[0];
-        /* NOTICE: i = 1 */
-        for(i=1; i < cmd->argc; i++) {
-            *((char **)push_array(allowed_ips)) = cmd->argv[i];
-        }
     } else {
-        /*
-         * cmd->pool で割り当てると複数回 LibMemcachedDenyAllowFromが呼び出された際に
-         * cmd->argv[0]がNULLになる。poolのスコープがよく分からん
-         */
-        allowed_ips = pr_expr_create(main_server->pool, &argc, argv);
+        allowed_ips = pr_table_alloc(main_server->pool, 0);
         c = add_config_param(cmd->argv[0], 0, NULL);
         c->argv[0] = allowed_ips;
     }
 
-    /* debug log */
-    for(i=0; i < allowed_ips->nelts; i++) {
-        char *allowed_ip = *((char **)allowed_ips->elts + i);
+    for(i=1; i < cmd->argc; i++) {
+        const char *allowed_ip = cmd->argv[i];
+        pr_table_add_dup(allowed_ips, allowed_ip, "y", 1);
         pr_log_debug(DEBUG2,
                      "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, allowed_ip);
     }
@@ -116,8 +103,13 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     cached_ip = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
     pr_timer_remove(timer_id, NULL);
 
-    /* on failed connect to memcached */
-    if(MEMCACHED_SUCCESS != rc) {
+    /* no cache */
+    if(MEMCACHED_NOTFOUND == rc)
+        return false;
+
+    /* failed by other reason */
+    if(MEMCACHED_SUCCESS  != rc &&
+       MEMCACHED_NOTFOUND != rc) {
         pr_log_auth(PR_LOG_ERR,
                     "%s: failed memcached_get() %s",
                     MODULE_NAME, memcached_strerror(mmc, rc));
@@ -139,35 +131,30 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
                     MODULE_NAME,  cached_ip, local_ip);
         return false;
     }
-    pr_log_debug(DEBUG2, "%s: not matched witsh Allowd IPs", MODULE_NAME);
 
+    pr_log_debug(DEBUG2, "%s: not matched witsh Allowed IPs", MODULE_NAME);
     return true;
 }
 
-static bool is_allowd_ip(const char *remote_ip) {
-    int i;
-    array_header *allowed_ips;
+static bool is_allowed_ip(const char *remote_ip) {
     config_rec *c;
+    pr_table_t *allowed_ips;
 
     c = find_config(CURRENT_CONF, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
-    if(!c)
+    if(NULL == c) { 
+        pr_log_auth(PR_LOG_ERR,
+                    "%s: config_rec is NULL. something fatal", MODULE_NAME);
         return false;
-
-    allowed_ips = c->argv[0];
-    if(!allowed_ips)
-        return false;
-
-    for(i=0; i < allowed_ips->nelts; i++) {
-        const char *allowed_ip = *((char **)allowed_ips->elts + i);
-        pr_log_debug(DEBUG2,
-                     "%s: compare remote IP '%s' with '%s'",
-                     MODULE_NAME, remote_ip, allowed_ip);
-        if(0 == strcmp(remote_ip, allowed_ip))  {
-            return true;
-        }
     }
 
-    return false;
+    allowed_ips = c->argv[0];
+    if(NULL == allowed_ips) {
+        pr_log_auth(PR_LOG_ERR,
+                    "%s: pr_table_t is NULL. something fatal", MODULE_NAME);
+        return false;
+    }
+
+    return pr_table_exists(allowed_ips, remote_ip) ? true : false;
 }
 
 MODRET memcached_deny_post_pass(cmd_rec *cmd) {
@@ -182,7 +169,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
       const char *account  = session.user;
 
     */
-    char key[MAX_KEY_LENGTH];
+    const char *key;
     pr_netaddr_t *remote_netaddr = NULL;
     pr_netaddr_t *local_net_addr = NULL;
     const char *account   = NULL; 
@@ -202,15 +189,6 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
-/*      /\* Format string attack *\/ */
-/*     if(NULL != strchr(account, '%')) { */
-/*         pr_log_auth(PR_LOG_ERR, */
-/*                     "%s: '%s' account name contains invalid character ''", */
-/*                     MODULE_NAME, account); */
-/*         pr_response_send(R_530, _("Login denyied")); */
-/*         end_login(0); */
-/*     } */
-
     remote_netaddr = pr_netaddr_get_sess_remote_addr();
     if(NULL == remote_netaddr) {
         pr_log_auth(PR_LOG_ERR, "%s: pr_netaddr_t not found. something fatal", MODULE_NAME);
@@ -228,15 +206,16 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     remote_ip = pr_netaddr_get_ipstr(remote_netaddr);
     local_ip  = pr_netaddr_get_ipstr(local_net_addr);
 
-    if(true == is_allowd_ip(remote_ip)) {
+    if(true == is_allowed_ip(remote_ip)) {
         pr_log_auth(PR_LOG_NOTICE,
-                    "%s: %s matched with Allowd IP", MODULE_NAME, remote_ip);
+                    "%s: %s matched with Allowed IP", MODULE_NAME, remote_ip);
         return PR_DECLINED(cmd);
     }
 
-    if(snprintf(key, MAX_KEY_LENGTH, "%s@%s", account, remote_ip) < 0) {
+    key = pstrcat(cmd->tmp_pool, account, "@", remote_ip, NULL);
+    if(!key) { 
         pr_log_auth(PR_LOG_NOTICE,
-                    "%s: oops, snprintf() failed %s", MODULE_NAME, strerror(errno));
+                    "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
         pr_response_send(R_530, _("Login denyied (server error)"));
         end_login(0);
     }
@@ -249,7 +228,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     }
 
     pr_log_debug(DEBUG2,
-                 "%s::%s(): cache found. '%s' allowd to auth", MODULE_NAME, __FUNCTION__, key);
+                 "%s::%s(): cache found. '%s' allowed to auth", MODULE_NAME, __FUNCTION__, key);
 
     return PR_DECLINED(cmd);
 }
