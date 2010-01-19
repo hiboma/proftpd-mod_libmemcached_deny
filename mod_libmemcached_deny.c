@@ -18,6 +18,16 @@ static const int MAX_KEY_LENGTH = _MAX_KEY_LENGTH;
 static bool is_set_server = false;
 static memcached_st *memcached_deny_mmc = NULL;
 
+#ifdef DEBUG
+static int walk_table(const void *key_data,
+                      void *value_data,
+                      size_t value_datasz,
+                      void *user_data) {
+    pr_log_debug(DEBUG2, "%s %s => %s\n", MODULE_NAME, (char *)key_data, (char *)value_datasz);
+    return 0;
+}
+#endif 
+
 static int libmemcached_deny_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
@@ -154,8 +164,10 @@ static bool is_allowed_ip(const char *remote_ip) {
                     "%s: pr_table_t is NULL. something fatal", MODULE_NAME);
         return false;
     }
-
-    return pr_table_exists(allowed_ips, remote_ip) ? true : false;
+#ifdef DEBUG
+    pr_table_do(allowed_ips, walk_table, NULL, 0);
+#endif
+    return pr_table_exists(allowed_ips, remote_ip) <= 0 ? false : true ;
 }
 
 MODRET memcached_deny_post_pass(cmd_rec *cmd) {
