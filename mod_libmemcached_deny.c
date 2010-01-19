@@ -160,7 +160,6 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
         return false;
     }
 
-    pr_log_debug(DEBUG2, "%s: not matched with Allowed IPs", MODULE_NAME);
     return true;
 }
 
@@ -235,9 +234,12 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     if(true == is_allowed_ip(remote_ip)) {
         pr_log_auth(PR_LOG_NOTICE,
-                    "%s: %s matched with Allowed IP", MODULE_NAME, remote_ip);
+                    "%s: '%s' found in Allowed IP", MODULE_NAME, remote_ip);
         return PR_DECLINED(cmd);
     }
+
+    pr_log_debug(DEBUG2,
+                "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
 
     /* key is <account>@<proftpd IP> */
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
@@ -256,7 +258,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     }
 
     pr_log_debug(DEBUG2,
-                 "%s::%s(): cache found. '%s' allowed to auth", MODULE_NAME, __FUNCTION__, key);
+                 "%s: cache found. '%s' allowed to auth", MODULE_NAME, key);
 
     return PR_DECLINED(cmd);
 }
