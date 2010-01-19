@@ -35,21 +35,34 @@ MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
     int i;
 
     /* check command context */
-    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL|CONF_VIRTUAL);
 
     /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
     argv = cmd->argv;
-    argc = cmd->argc - 1;
+    argc = cmd->argc -1;
 
-    allowed_ips = pr_expr_create(cmd->pool, &argc, argv);
-    c = add_config_param(cmd->argv[0], 0, NULL);
-    c->argv[0] = allowed_ips;
+    c = find_config(main_server->conf, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
+    if(c && c->argv[0]) {
+        allowed_ips = c->argv[0];
+        /* NOTICE: i = 1 */
+        for(i=1; i < cmd->argc; i++) {
+            *((char **)push_array(allowed_ips)) = cmd->argv[i];
+        }
+    } else {
+        /*
+         * cmd->pool で割り当てると複数回 LibMemcachedDenyAllowFromが呼び出された際に
+         * cmd->argv[0]がNULLになる。poolのスコープがよく分からん
+         */
+        allowed_ips = pr_expr_create(main_server->pool, &argc, argv);
+        c = add_config_param(cmd->argv[0], 0, NULL);
+        c->argv[0] = allowed_ips;
+    }
 
     /* debug log */
     for(i=0; i < allowed_ips->nelts; i++) {
-        const char *allowd_ip = *((char **)allowed_ips->elts + i);
+        char *allowed_ip = *((char **)allowed_ips->elts + i);
         pr_log_debug(DEBUG2,
-                     "%s add LibMemcachedDenyAllowFrom %s", MODULE_NAME, allowd_ip);
+                     "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, allowed_ip);
     }
 
     return PR_HANDLED(cmd);
