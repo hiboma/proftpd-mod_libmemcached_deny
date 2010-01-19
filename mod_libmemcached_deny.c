@@ -69,23 +69,28 @@ MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
 }
 
 MODRET set_memcached_deny_server(cmd_rec *cmd) {
+
+    int i;
     memcached_return rc;
     memcached_server_st *server = NULL;
 
     /* check command context */
-    CHECK_ARGS(cmd, 1);
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL|CONF_VIRTUAL);
 
-    server = memcached_servers_parse((char *)cmd->argv[1]);
-    rc = memcached_server_push(memcached_deny_mmc, server);
-    if(rc != MEMCACHED_SUCCESS){
-        pr_log_auth(PR_LOG_ERR,
-                   "Fatal %s: failed memcached_strerror(): %s",
-                    MODULE_NAME, memcached_strerror(memcached_deny_mmc, rc));
-        exit(1);
+    /* NOTICE: i = 1 */
+    for(i=1; i < cmd->argc; i++) {
+        const char *arg = cmd->argv[i];
+        server = memcached_servers_parse(arg);
+        rc = memcached_server_push(memcached_deny_mmc, server);
+        if(rc != MEMCACHED_SUCCESS){
+            pr_log_auth(PR_LOG_ERR,
+                        "Fatal %s: failed memcached_strerror(): %s",
+                        MODULE_NAME, memcached_strerror(memcached_deny_mmc, rc));
+            exit(1);
+        }
+        pr_log_debug(DEBUG2,
+                     "%s: add memcached server %s", MODULE_NAME, arg);
     }
-    pr_log_debug(DEBUG2,
-                 "%s: add memcached server %s", MODULE_NAME, (char *)cmd->argv[1]);
     is_set_server = true;
     return PR_HANDLED(cmd);
 }
