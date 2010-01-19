@@ -72,12 +72,9 @@ MODRET set_memcached_deny_server(cmd_rec *cmd) {
     memcached_return rc;
     memcached_server_st *server = NULL;
 
-    /* cmd is SetAutoperm <perm> <regex_str> */
-    if (cmd->argc-1 != 1)
-        CONF_ERROR(cmd, "wrong number of parameters");
-
     /* check command context */
-    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
+    CHECK_ARGS(cmd, 1);
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL|CONF_VIRTUAL);
 
     server = memcached_servers_parse((char *)cmd->argv[1]);
     rc = memcached_server_push(memcached_deny_mmc, server);
@@ -132,11 +129,12 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
 
     /* compare memacched IP with local IP(proftpd's host) */
     if(0 != strcmp(cached_ip, local_ip)) {
-        pr_log_auth(PR_LOG_NOTICE,
+        pr_log_debug(DEBUG2,
                     "%s: memcached IP '%s' not matched with local IP '%s' ",
                     MODULE_NAME,  cached_ip, local_ip);
         return false;
     }
+    pr_log_debug(DEBUG2, "%s: not matched witsh Allowd IPs", MODULE_NAME);
 
     return true;
 }
@@ -156,7 +154,9 @@ static bool is_allowd_ip(const char *remote_ip) {
 
     for(i=0; i < allowed_ips->nelts; i++) {
         const char *allowed_ip = *((char **)allowed_ips->elts + i);
-        pr_log_debug(DEBUG2, "%s %s", MODULE_NAME, allowed_ip);
+        pr_log_debug(DEBUG2,
+                     "%s: compare remote IP '%s' with '%s'",
+                     MODULE_NAME, remote_ip, allowed_ip);
         if(0 == strcmp(remote_ip, allowed_ip))  {
             return true;
         }
