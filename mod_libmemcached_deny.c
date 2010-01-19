@@ -40,7 +40,7 @@ MODRET set_memcached_deny_server(cmd_rec *cmd) {
 
     server = memcached_servers_parse((char *)cmd->argv[1]);
     rc = memcached_server_push(memcached_deny_mmc, server);
-    if(!rc == MEMCACHED_SUCCESS){
+    if(rc != MEMCACHED_SUCCESS){
         pr_log_auth(PR_LOG_ERR,
                    "Fatal %s: failed memcached_strerror(): %s",
                     MODULE_NAME, memcached_strerror(memcached_deny_mmc, rc));
