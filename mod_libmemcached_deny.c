@@ -27,6 +27,34 @@ static int libmemcached_deny_init(void) {
     return 0;
 }
 
+MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
+    config_rec *c;
+    array_header *allowed_ips = NULL;
+    char **argv;
+    int argc;
+    int i;
+
+    /* check command context */
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
+
+    /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
+    argv = cmd->argv;
+    argc = cmd->argc - 1;
+
+    allowed_ips = pr_expr_create(cmd->pool, &argc, argv);
+    c = add_config_param(cmd->argv[0], 0, NULL);
+    c->argv[0] = allowed_ips;
+
+    /* debug log */
+    for(i=0; i < allowed_ips->nelts; i++) {
+        const char *allowd_ip = *((char **)allowed_ips->elts + i);
+        pr_log_debug(DEBUG2,
+                     "%s add LibMemcachedDenyAllowFrom %s", MODULE_NAME, allowd_ip);
+    }
+
+    return PR_HANDLED(cmd);
+}
+
 MODRET set_memcached_deny_server(cmd_rec *cmd) {
     memcached_return rc;
     memcached_server_st *server = NULL;
@@ -100,6 +128,30 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     return true;
 }
 
+static bool is_allowd_ip(const char *remote_ip) {
+    int i;
+    array_header *allowed_ips;
+    config_rec *c;
+
+    c = find_config(CURRENT_CONF, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
+    if(!c)
+        return false;
+
+    allowed_ips = c->argv[0];
+    if(!allowed_ips)
+        return false;
+
+    for(i=0; i < allowed_ips->nelts; i++) {
+        const char *allowed_ip = *((char **)allowed_ips->elts + i);
+        pr_log_debug(DEBUG2, "%s %s", MODULE_NAME, allowed_ip);
+        if(0 == strcmp(remote_ip, allowed_ip))  {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     /*
       development memo
@@ -158,6 +210,12 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     remote_ip = pr_netaddr_get_ipstr(remote_netaddr);
     local_ip  = pr_netaddr_get_ipstr(local_net_addr);
 
+    if(true == is_allowd_ip(remote_ip)) {
+        pr_log_auth(PR_LOG_NOTICE,
+                    "%s: %s matched with Allowd IP", MODULE_NAME, remote_ip);
+        return PR_DECLINED(cmd);
+    }
+
     if(snprintf(key, MAX_KEY_LENGTH, "%s@%s", account, remote_ip) < 0) {
         pr_log_auth(PR_LOG_NOTICE,
                     "%s: oops, snprintf() failed %s", MODULE_NAME, strerror(errno));
@@ -180,6 +238,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
 static conftable libmemcached_deny_conftab[] = {
   { "LibMemcachedDenyServer",		set_memcached_deny_server,		NULL },
+  { "LibMemcachedDenyAllowFrom",   set_libmemcached_deny_allow_from, NULL },
   { NULL }
 };
  
