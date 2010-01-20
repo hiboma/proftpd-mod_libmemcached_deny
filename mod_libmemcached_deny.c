@@ -37,7 +37,66 @@ static int libmemcached_deny_init(void) {
     return 0;
 }
 
-MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
+MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
+    config_rec *c;
+    int i;
+    pr_table_t *explicit_users;
+
+    /* check command context */
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
+
+    /* argv => LMDExplicitUser nobody nobody1 nobody2 */
+    c = find_config(main_server->conf, CONF_PARAM, "LMDExplicitModeUser", FALSE);
+    if(c && c->argv[0]) {
+        explicit_users = c->argv[0];
+    } else {
+        c = add_config_param(cmd->argv[0], 0, NULL);
+        c->argv[0] = explicit_users = pr_table_alloc(main_server->pool, 0);
+    }
+
+    for(i=1; i < cmd->argc; i++) {
+        const char *account = pstrdup(main_server->pool, cmd->argv[i]);
+        if(pr_table_exists(explicit_users, account) > 0) {
+            pr_log_debug(DEBUG2,
+                         "%s: %s is already registerd", MODULE_NAME, account);
+            continue;
+        }
+
+        if(pr_table_add_dup(explicit_users, account, "y", 0) < 0){
+            pr_log_pri(PR_LOG_ERR,
+                       "%s: failed pr_table_add_dup(): %s",
+                       MODULE_NAME, strerror(errno));
+            exit(1);
+        }
+        pr_log_debug(DEBUG2,
+                     "%s: add LMDExplicitModeUser[%d] %s", MODULE_NAME, i, account);
+    }
+
+    return PR_HANDLED(cmd);
+}
+
+MODRET set_libmemcached_explicit_mode(cmd_rec *cmd) {
+    int boolean = -1;
+    config_rec *c;
+
+    CHECK_ARGS(cmd, 1);
+    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
+
+    boolean = get_boolean(cmd, 1);
+    if (boolean == -1)
+        CONF_ERROR(cmd, "expected boolean parameter");
+
+    c = add_config_param(cmd->argv[0], 1, NULL);
+    c->argv[0] = pcalloc(c->pool, sizeof(int));
+    *((int *) c->argv[0]) = boolean;
+
+    pr_log_debug(DEBUG2,
+                 "%s: LMDExplicitMode is %d", MODULE_NAME, boolean);
+
+    return PR_HANDLED(cmd);
+}
+
+MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
     config_rec *c;
     int i;
     pr_table_t *allowed_ips;
@@ -166,6 +225,42 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     return false;
 }
 
+static bool is_explicit_mode(void) {
+    config_rec *c;
+    int is_explicit;
+
+    c = find_config(main_server->conf, CONF_PARAM, "LMDExplicitMode", FALSE);
+    if(NULL == c)
+        return false;
+
+    if(NULL == c->argv[0])
+        return false;
+
+    is_explicit = *(int *) c->argv[0];
+    return is_explicit ? true : false;
+}
+
+static bool is_explicit_mode_user(const char *account) {
+    config_rec *c;
+    pr_table_t *explicit_users;
+
+    c = find_config(main_server->conf, CONF_PARAM, "LMDExplicitModeUser", FALSE);
+    if(NULL == c)
+        return false;
+
+    if(NULL == c->argv[0])
+        return false;
+
+    explicit_users = c->argv[0];
+    if(pr_table_exists(explicit_users, account) < 0 )
+        return false;
+
+    pr_log_debug(DEBUG2,
+                 "%s: %s is explicit user", MODULE_NAME, account);
+
+    return true;
+}
+
 static bool is_allowed_ip(const char *remote_ip) {
     config_rec *c;
     pr_table_t *allowed_ips;
@@ -218,6 +313,12 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
+    if(is_explicit_mode() && !is_explicit_mode_user(account)) {
+        pr_log_auth(PR_LOG_NOTICE,
+                     "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
+        return PR_DECLINED(cmd);
+    }
+
     remote_netaddr = pr_netaddr_get_sess_remote_addr();
     if(NULL == remote_netaddr) {
         pr_log_auth(PR_LOG_ERR, "%s: pr_netaddr_t not found. something fatal", MODULE_NAME);
@@ -268,8 +369,10 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
 /* ディレクティブの名前がイマイチ... */
 static conftable libmemcached_deny_conftab[] = {
-  { "LMDMemcachedHost", set_memcached_memcached_host, NULL },
-  { "LMDAllowFrom",   set_libmemcached_deny_allow_from, NULL },
+  { "LMDMemcachedHost",    add_libmemcached_memcached_host, NULL },
+  { "LMDAllowFrom",        add_libmemcached_deny_allow_from, NULL },
+  { "LMDExplicitMode",     set_libmemcached_explicit_mode, NULL },
+  { "LMDExplicitModeUser", add_libmemcached_explicit_user, NULL },
   { NULL }
 };
  
