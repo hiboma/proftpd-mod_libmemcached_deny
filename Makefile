@@ -4,11 +4,11 @@ PRXS=$(PRXS_DIR)/prxs
 LIBS=/usr/local/lib
 SOURCE=mod_libmemcached_deny.c
 
-mod_libmemcached_deny.so: 
+mod_libmemcached_deny.so:
 	$(PRXS) -c $(SOURCE) -L=$(LIBS) -l=memcached
 
-install: .libs/mod_libmemcached_deny.so
-	$(PRXS) -c $(SOURCE) -L=$(LIBS) -l=memcached -i
+install: mod_libmemcached_deny.so
+	$(PRXS) $(SOURCE) -L=$(LIBS) -l=memcached -i
 
 clean:
 	rm -v *.la
