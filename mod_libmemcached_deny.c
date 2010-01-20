@@ -42,7 +42,9 @@ MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
     int i;
     pr_table_t *explicit_users;
 
-    /* check command context */
+    if(cmd->argc < 2)
+        CONF_ERROR(cmd, "missing argument");
+
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* argv => LMDExplicitUser nobody nobody1 nobody2 */
@@ -79,7 +81,9 @@ MODRET set_libmemcached_explicit_mode(cmd_rec *cmd) {
     int boolean = -1;
     config_rec *c;
 
-    CHECK_ARGS(cmd, 1);
+    if(cmd->argc != 2)
+        CONF_ERROR(cmd, "invalid argument");
+
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     boolean = get_boolean(cmd, 1);
@@ -101,7 +105,9 @@ MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
     int i;
     pr_table_t *allowed_ips;
 
-    /* check command context */
+    if(cmd->argc < 2 )
+        CONF_ERROR(cmd, "argument missing");
+
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
@@ -139,12 +145,13 @@ MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
 }
 
 MODRET add_libmemcached_memcached_host(cmd_rec *cmd) {
-
     int i;
     memcached_return rc;
     memcached_server_st *server = NULL;
 
-    /* check command context */
+    if(cmd->argc < 2 )
+        CONF_ERROR(cmd, "argument missing");
+
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* NOTICE: i = 1 */
