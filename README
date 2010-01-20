@@ -1,0 +1,69 @@
+ 
+                         mod_libmemcached_deny.c
+                 =======================================
+
+------------
+usage
+------------
+
+    o memcachedを127.0.0.1で起動して用いるベーシックな使い方
+    o 全てのIPに制限がかかる
+
+        LoadModule mod_libmemcached_deny.c
+        <IfModule mod_libmemcached_deny.c>
+           LMDMemcachedHost 127.0.0.1
+        </IfModule>
+
+        
+    o 192.168.0.1 からのログインはキャッシュを見ないで許可する場合
+    
+        LoadModule mod_libmemcached_deny.c
+        <IfModule mod_libmemcached_deny.c>
+           LMDMemcachedHost 127.0.0.1
+           LMDAllowFrom 192.168.0.1    
+        </IfModule>
+
+        
+    o hogeとfugaユーザーのみ キャッシュ確認する。
+    o その他のユーザーは確認しない
+        
+        LoadModule mod_libmemcached_deny.c
+        <IfModule mod_libmemcached_deny.c>
+           LMDMemcachedHost 127.0.0.1
+           LMDExplicitMode on
+           LMDExplicitModeUser hoge fuga
+        </IfModule>
+
+    (なんだか変な設定かと思われるかもしれませんが)
+    
+    既に稼働中のシステムが存在し 一度に全体のログインに制限をかける運用が難しい場
+    合に LMDExplicitModeUser を徐々に追加し制限つきアカウントを増やす用途を想定し
+    ています。
+
+------------
+memcached
+------------
+
+    o memcachedには以下の形式で key と value をストアする必要があります
+
+        { "<account>@<proftpd hosts IP>" : "<clients IP>" }
+        
+    o 192.168.0.1のhogeアカウント には 192.168.0.2 から ログイン可能
+
+        { "hoge@192.168.0.1" : "192.168.0.2" }
+
+    o 複数のIPからのログインを許可したい場合は value をタブ区切りにします
+    
+        { "<account>@<proftpd hosts IP>" : "<clients IP>\t<clients IP2>\t<clients IP3>" }
+        
+    o 192.168.0.1のhogeアカウント には 192.168.0.{2,3,4} からログイン可能
+    
+        { "hoge@192.168.0.1" : "192.168.0.2\t192.168.0.3\t192.168.0.4" } 
+
+    o ログインを禁止したい場合はキャッシュを消せばokです
+
+------------
+todo
+------------
+
+    o Deny from の制限と排他的になっちゃうのはどうしようかと 
