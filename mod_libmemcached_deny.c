@@ -123,12 +123,13 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     int timer_id;
     memcached_return rc;
     const char *cached_ip;
+    char *cached_value;
     size_t value_len;
     uint32_t flag;
 
     /* todo */
     timer_id = pr_timer_add(1, -1, NULL, libmemcached_deny_timeout_callback, "memcached_get");
-    cached_ip = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
+    cached_value = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
     pr_timer_remove(timer_id, NULL);
 
     /* no cache */
@@ -145,22 +146,24 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     }
 
     /* cache not fond */
-    if(NULL == cached_ip)
+    if(NULL == cached_value)
         return false;
 
     /* something wrong */
     if(0 == value_len)
         return false;
 
-    /* compare memacched IP with client IP */
-    if(0 != strcmp(cached_ip, remote_ip)) {
+    while((cached_ip = pr_str_get_token(&cached_value, "\t")) != NULL) {
+        /* compare memacched IP with client IP */
+        if(0 == strcmp(cached_ip, remote_ip)) {
+            return true;
+        }
         pr_log_debug(DEBUG2,
-                    "%s: memcached IP '%s' not matched with remote IP '%s' ",
-                    MODULE_NAME,  cached_ip, remote_ip);
-        return false;
+                     "%s: memcached IP '%s' not matched with remote IP '%s' ",
+                     MODULE_NAME,  cached_ip, remote_ip);
     }
 
-    return true;
+    return false;
 }
 
 static bool is_allowed_ip(const char *remote_ip) {
