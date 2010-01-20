@@ -46,7 +46,7 @@ MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
-    c = find_config(main_server->conf, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
+    c = find_config(main_server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(c && c->argv[0]) {
         allowed_ips = c->argv[0];
     } else {
@@ -170,7 +170,7 @@ static bool is_allowed_ip(const char *remote_ip) {
     config_rec *c;
     pr_table_t *allowed_ips;
 
-    c = find_config(main_server->conf, CONF_PARAM, "LibMemcachedDenyAllowFrom", FALSE);
+    c = find_config(main_server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(NULL == c)
         return false;
 
