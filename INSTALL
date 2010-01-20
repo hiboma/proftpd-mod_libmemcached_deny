@@ -16,7 +16,7 @@ Installation Instructions
 2.  edit proftpd.conf
 
        LoadModule mod_libmemcached_deny.c
-       LibMemcachedDenyServer 127.0.0.11.1
+       LMDMemcachedHost 127.0.0.1
 
 3.  start proftpd
 

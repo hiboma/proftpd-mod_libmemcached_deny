@@ -79,7 +79,7 @@ MODRET set_libmemcached_deny_allow_from(cmd_rec *cmd) {
     return PR_HANDLED(cmd);
 }
 
-MODRET set_memcached_deny_server(cmd_rec *cmd) {
+MODRET set_memcached_memcached_host(cmd_rec *cmd) {
 
     int i;
     memcached_return rc;
@@ -263,9 +263,10 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
 }
 
+/* ディレクティブの名前がイマイチ... */
 static conftable libmemcached_deny_conftab[] = {
-  { "LibMemcachedDenyServer",		set_memcached_deny_server,		NULL },
-  { "LibMemcachedDenyAllowFrom",   set_libmemcached_deny_allow_from, NULL },
+  { "LMDMemcachedHost", set_memcached_memcached_host, NULL },
+  { "LMDAllowFrom",   set_libmemcached_deny_allow_from, NULL },
   { NULL }
 };
  
