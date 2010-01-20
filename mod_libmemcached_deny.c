@@ -138,7 +138,7 @@ MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
     return PR_HANDLED(cmd);
 }
 
-MODRET set_memcached_memcached_host(cmd_rec *cmd) {
+MODRET add_libmemcached_memcached_host(cmd_rec *cmd) {
 
     int i;
     memcached_return rc;
@@ -338,7 +338,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     if(true == is_allowed_ip(remote_ip)) {
         pr_log_auth(PR_LOG_NOTICE,
-                    "%s: '%s' found in Allowed IP", MODULE_NAME, remote_ip);
+                    "%s: '%s' found in Allowed IP. Skip last process", MODULE_NAME, remote_ip);
         return PR_DECLINED(cmd);
     }
 
@@ -347,14 +347,14 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     /* key is <account>@<proftpd IP> */
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
-    if(!key) { 
+    if(NULL == key) { 
         pr_log_auth(PR_LOG_NOTICE,
                     "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
         pr_response_send(R_530, _("Login denyied (server error)"));
         end_login(0);
     }
 
-    if(libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip) == false) {
+    if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip)) {
         pr_log_auth(PR_LOG_NOTICE,
                     "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
