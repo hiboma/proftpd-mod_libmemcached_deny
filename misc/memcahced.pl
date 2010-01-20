@@ -5,6 +5,7 @@ use warnings;
 use Cache::Memcached;
 
 my $memd = new Cache::Memcached { 'servers' => [ "127.0.0.1:11211"]  };
-$memd->set(@ARGV)    if @ARGV == 2;
-$memd->delete(@ARGV) if @ARGV == 1;
-printf "%s => '%s'\n", $ARGV[0], $memd->get($ARGV[0]);
+my $key = shift;
+$memd->set($key, join "\t", @ARGV) if @ARGV != 0;
+$memd->delete($key)               if @ARGV == 0;
+printf "%s => '%s'\n", $key, $memd->get($key);
