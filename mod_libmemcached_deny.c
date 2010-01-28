@@ -181,14 +181,18 @@ static int libmemcached_deny_timeout_callback(CALLBACK_FRAME) {
 
 /*
  * memcached has
+ *
  *     <account>@<proftpd IP> : <client IP>
+ *     <account>@<proftpd IP> : <REMOTE_HOST>
+ *     <account>@<proftpd IP> : <client IP>\t<REMOTE_HOST> ...
  */
 static bool libmemcached_deny_cache_exits(memcached_st *mmc,
-                                       const char *key,
-                                       const char *remote_ip) {
+                                          const char *key,
+                                          const char *remote_ip,
+                                          const char *remote_host) {
     int timer_id;
     memcached_return rc;
-    const char *cached_ip;
+    const char *ip_or_hostname;
     char *cached_value;
     size_t value_len;
     uint32_t flag;
@@ -219,14 +223,21 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     if(0 == value_len)
         return false;
 
-    while((cached_ip = pr_str_get_token(&cached_value, "\t")) != NULL) {
-        /* compare memacched IP with client IP */
-        if(0 == strcmp(cached_ip, remote_ip)) {
+    while((ip_or_hostname = pr_str_get_token(&cached_value, "\t")) != NULL) {
+        /* compare memacched IP with client hostname */
+        if(remote_host && 0 == strcmp(ip_or_hostname, remote_host)) {
+            pr_log_debug(DEBUG2,
+                     "%s: memcached hostname '%s' matched with remote host '%s'",
+                     MODULE_NAME,  ip_or_hostname, remote_host);
             return true;
         }
-        pr_log_debug(DEBUG2,
-                     "%s: memcached IP '%s' not matched with remote IP '%s' ",
-                     MODULE_NAME,  cached_ip, remote_ip);
+        /* compare memacched IP with client IP */
+        if(0 == strcmp(ip_or_hostname, remote_ip)) {
+            pr_log_debug(DEBUG2,
+                     "%s: memcached IP '%s' matched with remote IP '%s'",
+                     MODULE_NAME,  ip_or_hostname, remote_ip);
+            return true;
+        }
     }
 
     return false;
@@ -306,6 +317,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     const char *account   = NULL; 
     const char *remote_ip = NULL;
     const char *local_ip = NULL;
+    const char *remote_host = NULL;
 
     if(false == is_set_server) {
         pr_log_auth(PR_LOG_ERR, "%s: memcached_server not set", MODULE_NAME);
@@ -361,7 +373,10 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
-    if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip)) {
+    /* return IP unless found hostname */
+    remote_host = pr_netaddr_get_sess_remote_name();
+
+    if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip, remote_host)) {
         pr_log_auth(PR_LOG_NOTICE,
                     "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
