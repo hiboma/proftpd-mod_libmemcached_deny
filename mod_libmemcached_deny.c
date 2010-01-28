@@ -279,7 +279,7 @@ static bool is_explicit_mode_user(const char *account) {
     return true;
 }
 
-static bool is_allowed_ip(const char *remote_ip) {
+static bool is_allowed(const char *remote_ip, const char *remote_host) {
     config_rec *c;
     pr_table_t *allowed_ips;
 
@@ -296,7 +296,20 @@ static bool is_allowed_ip(const char *remote_ip) {
 #ifdef DEBUG
     pr_table_do(allowed_ips, walk_table, NULL, 0);
 #endif
-    return pr_table_exists(allowed_ips, remote_ip) <= 0 ? false : true ;
+
+    if(pr_table_exists(allowed_ips, remote_host) > 0) {
+         pr_log_auth(PR_LOG_NOTICE,
+            "%s: hostname '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_host);
+         return true;
+    }
+    
+    if(pr_table_exists(allowed_ips, remote_ip) > 0) {
+         pr_log_auth(PR_LOG_NOTICE,
+            "%s: IP '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_ip);
+         return true;
+    }
+
+    return false;
 }
 
 MODRET memcached_deny_post_pass(cmd_rec *cmd) {
@@ -354,10 +367,10 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     remote_ip = pr_netaddr_get_ipstr(remote_netaddr);
     local_ip  = pr_netaddr_get_ipstr(local_net_addr);
-
-    if(true == is_allowed_ip(remote_ip)) {
-        pr_log_auth(PR_LOG_NOTICE,
-                    "%s: '%s' found in Allowed IP. Skip last process", MODULE_NAME, remote_ip);
+    /* return IP unless found hostname */
+    remote_host = pr_netaddr_get_sess_remote_name();
+    
+    if(true == is_allowed(remote_ip, remote_host)) {
         return PR_DECLINED(cmd);
     }
 
@@ -372,9 +385,6 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         pr_response_send(R_530, _("Login denyied (server error)"));
         end_login(0);
     }
-
-    /* return IP unless found hostname */
-    remote_host = pr_netaddr_get_sess_remote_name();
 
     if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip, remote_host)) {
         pr_log_auth(PR_LOG_NOTICE,
