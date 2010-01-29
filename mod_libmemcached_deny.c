@@ -409,7 +409,7 @@ static conftable libmemcached_deny_conftab[] = {
 };
  
 static cmdtable libmemcached_deny_cmdtab[] = {
-  { PRE_CMD, C_PASS,	G_NONE,	 memcached_deny_post_pass,	FALSE,	FALSE, CL_AUTH },
+  { POST_CMD, C_USER,	G_NONE,	 memcached_deny_post_pass,	FALSE,	FALSE, CL_AUTH },
   { 0, NULL }
 };
  
