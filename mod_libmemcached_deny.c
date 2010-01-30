@@ -47,7 +47,7 @@ MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
 
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
-    /* argv => LMDExplicitUser nobody nobody1 nobody2 */
+    /* argv => LMDUser nobody nobody1 nobody2 */
     c = find_config(main_server->conf, CONF_PARAM, "LMDUser", FALSE);
     if(c && c->argv[0]) {
         explicit_users = c->argv[0];
@@ -87,6 +87,7 @@ MODRET add_libmemcached_explicit_user_regex(cmd_rec *cmd) {
         CONF_ERROR(cmd, "missing argument");
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
+    /* argv => LMDUserRegex ^test */
     c = find_config(cmd->server->conf, CONF_PARAM, "LMDUserRegex", FALSE);
     if(c && c->argv[0]) {
         list = c->argv[0];
@@ -265,7 +266,7 @@ static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
         pr_table_t *explicit_users = c->argv[0];
         if(pr_table_exists(explicit_users, account) > 0 ) {
             pr_log_debug(DEBUG2,
-                         "%s: %s is explicit user in LMDUser", MODULE_NAME, account);
+                "%s: %s is found in LMDUser", MODULE_NAME, account);
             return true;
         }
     }
@@ -304,6 +305,7 @@ static bool is_allowed(const char *remote_ip, const char *remote_host) {
           "%s: pr_table_t is NULL. something fatal", MODULE_NAME);
         return false;
     }
+
 #ifdef DEBUG
     pr_table_do(allowed_ips, walk_table, NULL, 0);
 #endif
@@ -313,7 +315,7 @@ static bool is_allowed(const char *remote_ip, const char *remote_host) {
              "%s: hostname '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_host);
          return true;
     }
-    
+
     if(pr_table_exists(allowed_ips, remote_ip) > 0) {
          pr_log_auth(PR_LOG_NOTICE,
              "%s: IP '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_ip);
@@ -325,15 +327,8 @@ static bool is_allowed(const char *remote_ip, const char *remote_host) {
 
 MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     /*
-      development memo
-      view include/netaddr.h
-
-      pr_netaddr_get_sess_remote_name()はホスト名取って来るので微妙
-      const char *remote_ip = pr_netaddr_get_sess_remote_name();
-
       mod_authを通過するまでは session.userは空の様子
       const char *account  = session.user;
-
     */
     const char *key;
     const char *account   = NULL; 
@@ -394,7 +389,6 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
 }
 
-/* ディレクティブの名前がイマイチ... */
 static conftable libmemcached_deny_conftab[] = {
   { "LMDMemcachedHost", add_libmemcached_memcached_host, NULL },
   { "LMDAllowFrom", add_libmemcached_deny_allow_from, NULL },
@@ -407,14 +401,28 @@ static cmdtable libmemcached_deny_cmdtab[] = {
   { POST_CMD, C_USER,	G_NONE,	 memcached_deny_post_pass,	FALSE,	FALSE, CL_AUTH },
   { 0, NULL }
 };
- 
+
 module libmemcached_deny_module = {
   NULL, NULL,
-  0x20,                    /* Module API version */
-  "libmemcached_deny", /* Module name */
+
+  /* Module API version */
+  0x20,
+
+  /* Module name */
+  "libmemcached_deny",
+
+  /* Module configuration directive table */
   libmemcached_deny_conftab,
-  libmemcached_deny_cmdtab,      /* Module command handler table */
-  NULL,             /* Module authentication handler table */
-  libmemcached_deny_init , /* Module initialization function */
-  NULL, // autoperm_sess_init  /* Session initialization function */
+
+  /* Module command handler table */
+  libmemcached_deny_cmdtab,
+
+  /* Module authentication handler table */
+  NULL,
+
+  /* Module initialization function */
+  libmemcached_deny_init ,
+
+  /* Session initialization function */
+  NULL,
 };
