@@ -379,12 +379,12 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip, remote_host)) {
         pr_log_auth(PR_LOG_NOTICE,
             "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
-        pr_response_send(R_530, _("Login denyied"));
+        pr_response_send(R_530, _("Login denyied (cache is expired)"));
         end_login(0);
     }
 
     pr_log_debug(DEBUG2,
-        "%s: cache found. '%s' allowed to auth", MODULE_NAME, key);
+        "%s: cache found. '%s' is allowed to auth", MODULE_NAME, key);
 
     return PR_DECLINED(cmd);
 }
