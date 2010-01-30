@@ -6,7 +6,9 @@
 #include <stdbool.h>
 #include <utmp.h>
 
-static const char * const MODULE_NAME = "mod_libmemcached_deny";
+module libmemcached_deny_module;
+
+#define MODULE_NAME libmemcached_deny_module.name
 
 /* max account length + max IP length (255.255.255.255) + \0 */
 #define _MAX_KEY_LENGTH UT_NAMESIZE + 15 + 1;
@@ -26,7 +28,18 @@ static int walk_table(const void *key_data,
     pr_log_debug(DEBUG2, "%s %s => %s\n", MODULE_NAME, (char *)key_data, (char *)value_datasz);
     return 0;
 }
-#endif 
+#endif
+
+static void libmemcached_deny_postparse_ev(const void *event_data, void *user_data) {
+    memcached_stat_st *_unused;
+    memcached_return_t rc;
+    _unused = memcached_stat(memcached_deny_mmc, NULL, &rc);
+    if(rc != MEMCACHED_SUCCESS) {
+        pr_log_pri(PR_LOG_WARNING,
+            "%s: Failed connect to memcached. Please check memcached is alive", MODULE_NAME);
+        exit(1);
+    }
+}
 
 static int libmemcached_deny_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
@@ -34,6 +47,8 @@ static int libmemcached_deny_init(void) {
         pr_log_pri(PR_LOG_ERR, "Fatal %s: Out of memory", MODULE_NAME);
         exit(1);
     }
+    pr_event_register(&libmemcached_deny_module,
+        "core.postparse", libmemcached_deny_postparse_ev, NULL);
     return 0;
 }
 
