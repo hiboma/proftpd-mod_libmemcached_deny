@@ -325,8 +325,6 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     */
     const char *key;
-    pr_netaddr_t *remote_netaddr = NULL;
-    pr_netaddr_t *local_net_addr = NULL;
     const char *account   = NULL; 
     const char *remote_ip = NULL;
     const char *local_ip = NULL;
@@ -351,22 +349,8 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         return PR_DECLINED(cmd);
     }
 
-    remote_netaddr = pr_netaddr_get_sess_remote_addr();
-    if(NULL == remote_netaddr) {
-        pr_log_auth(PR_LOG_ERR, "%s: pr_netaddr_t not found. something fatal", MODULE_NAME);
-        pr_response_send(R_530, _("Login denyied (server error)"));
-        end_login(0);
-    }
-
-    local_net_addr = pr_netaddr_get_sess_local_addr();
-    if(NULL == remote_netaddr) {
-        pr_log_auth(PR_LOG_ERR, "%s: pr_netaddr_t not found. something fatal", MODULE_NAME);
-        pr_response_send(R_530, _("Login denyied (server error)"));
-        end_login(0);
-    }
-
-    remote_ip = pr_netaddr_get_ipstr(remote_netaddr);
-    local_ip  = pr_netaddr_get_ipstr(local_net_addr);
+    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
+    local_ip  = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
     /* return IP unless found hostname */
     remote_host = pr_netaddr_get_sess_remote_name();
     
