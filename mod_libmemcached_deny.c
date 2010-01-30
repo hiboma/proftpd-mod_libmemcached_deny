@@ -48,7 +48,7 @@ MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* argv => LMDExplicitUser nobody nobody1 nobody2 */
-    c = find_config(main_server->conf, CONF_PARAM, "LMDExplicitModeUser", FALSE);
+    c = find_config(main_server->conf, CONF_PARAM, "LMDUser", FALSE);
     if(c && c->argv[0]) {
         explicit_users = c->argv[0];
     } else {
@@ -71,7 +71,7 @@ MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
             exit(1);
         }
         pr_log_debug(DEBUG2,
-            "%s: add LMDExplicitModeUser[%d] %s", MODULE_NAME, i, account);
+            "%s: add LMDUser[%d] %s", MODULE_NAME, i, account);
     }
 
     return PR_HANDLED(cmd);
@@ -87,7 +87,7 @@ MODRET add_libmemcached_explicit_user_regex(cmd_rec *cmd) {
         CONF_ERROR(cmd, "missing argument");
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDExplicitModeUserRegex", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDUserRegex", FALSE);
     if(c && c->argv[0]) {
         list = c->argv[0];
     } else {
@@ -107,31 +107,8 @@ MODRET add_libmemcached_explicit_user_regex(cmd_rec *cmd) {
         }
         *((regex_t **) push_array(list)) = preg;
         pr_log_debug(DEBUG2,
-            "%s: add LMDExplicitModeUserRegex[%d] %s", MODULE_NAME, i, cmd->argv[i]);
+            "%s: add LMDUserRegex[%d] %s", MODULE_NAME, i, cmd->argv[i]);
     }
-
-    return PR_HANDLED(cmd);
-}
-
-MODRET set_libmemcached_explicit_mode(cmd_rec *cmd) {
-    int boolean = -1;
-    config_rec *c;
-
-    if(cmd->argc != 2)
-        CONF_ERROR(cmd, "invalid argument");
-
-    CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
-
-    boolean = get_boolean(cmd, 1);
-    if (boolean == -1)
-        CONF_ERROR(cmd, "expected boolean parameter");
-
-    c = add_config_param(cmd->argv[0], 1, NULL);
-    c->argv[0] = pcalloc(c->pool, sizeof(int));
-    *((int *) c->argv[0]) = boolean;
-
-    pr_log_debug(DEBUG2,
-        "%s: LMDExplicitMode is %d", MODULE_NAME, boolean);
 
     return PR_HANDLED(cmd);
 }
@@ -279,37 +256,22 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     return false;
 }
 
-static bool is_explicit_mode(void) {
-    config_rec *c;
-    int is_explicit;
-
-    c = find_config(main_server->conf, CONF_PARAM, "LMDExplicitMode", FALSE);
-    if(NULL == c)
-        return false;
-
-    if(NULL == c->argv[0])
-        return false;
-
-    is_explicit = *(int *) c->argv[0];
-    return is_explicit ? true : false;
-}
-
 static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
     config_rec *c;
 
     /* ハッシュテーブルにアカウントがあるか否か */
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDExplicitModeUser", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDUser", FALSE);
     if(c && c->argv[0]) {
         pr_table_t *explicit_users = c->argv[0];
         if(pr_table_exists(explicit_users, account) > 0 ) {
             pr_log_debug(DEBUG2,
-                         "%s: %s is explicit user in LMDExplicitModeUser", MODULE_NAME, account);
+                         "%s: %s is explicit user in LMDUser", MODULE_NAME, account);
             return true;
         }
     }
 
     /* 正規表現にマッチするか否か */
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDExplicitModeUserRegex", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDUserRegex", FALSE);
     if(c && c->argv[0]) {
         int i;
         array_header *regex_list = c->argv[0];
@@ -319,7 +281,7 @@ static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
             regex_t *preg = elts[i];
             if(regexec(preg, account, 0, NULL, 0) == 0) {
                 pr_log_debug(DEBUG2,
-                    "%s: %s is explicit user in LMDExplicitModeUserRegex", MODULE_NAME, account);
+                    "%s: %s is found in LMDUserRegex", MODULE_NAME, account);
                 return true;
             }
         }
@@ -392,7 +354,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
-    if(is_explicit_mode() && !is_explicit_mode_user(cmd, account)) {
+    if(!is_explicit_mode_user(cmd, account)) {
         pr_log_auth(PR_LOG_NOTICE,
            "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
         return PR_DECLINED(cmd);
@@ -434,11 +396,10 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
 /* ディレクティブの名前がイマイチ... */
 static conftable libmemcached_deny_conftab[] = {
-  { "LMDMemcachedHost",    add_libmemcached_memcached_host, NULL },
-  { "LMDAllowFrom",        add_libmemcached_deny_allow_from, NULL },
-  { "LMDExplicitMode",     set_libmemcached_explicit_mode, NULL },
-  { "LMDExplicitModeUser", add_libmemcached_explicit_user, NULL },
-  { "LMDExplicitModeUserRegex", add_libmemcached_explicit_user_regex, NULL },
+  { "LMDMemcachedHost", add_libmemcached_memcached_host, NULL },
+  { "LMDAllowFrom", add_libmemcached_deny_allow_from, NULL },
+  { "LMDUser", add_libmemcached_explicit_user, NULL },
+  { "LMDUserRegex", add_libmemcached_explicit_user_regex, NULL },
   { NULL }
 };
  
