@@ -31,13 +31,17 @@ static int walk_table(const void *key_data,
 #endif
 
 static void libmemcached_deny_postparse_ev(const void *event_data, void *user_data) {
-    memcached_stat_st *_unused;
+    memcached_stat_st *unused;
     memcached_return_t rc;
-    _unused = memcached_stat(memcached_deny_mmc, NULL, &rc);
+
+    unused = memcached_stat(memcached_deny_mmc, NULL, &rc);
     if(rc != MEMCACHED_SUCCESS) {
         pr_log_pri(PR_LOG_WARNING,
-            "%s: Failed connect to memcached. Please check memcached is alive", MODULE_NAME);
-        exit(1);
+            "%s: Failed connect to memcached."
+            "Please check memcached is alive", MODULE_NAME);
+
+        if(SERVER_INETD == ServerType)
+            exit(1);
     }
 }
 
