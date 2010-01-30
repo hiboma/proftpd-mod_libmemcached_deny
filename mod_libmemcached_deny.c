@@ -60,18 +60,18 @@ MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
         const char *account = pstrdup(main_server->pool, cmd->argv[i]);
         if(pr_table_exists(explicit_users, account) > 0) {
             pr_log_debug(DEBUG2,
-                         "%s: %s is already registerd", MODULE_NAME, account);
+                "%s: %s is already registerd", MODULE_NAME, account);
             continue;
         }
 
         if(pr_table_add_dup(explicit_users, account, "y", 0) < 0){
             pr_log_pri(PR_LOG_ERR,
-                       "%s: failed pr_table_add_dup(): %s",
-                       MODULE_NAME, strerror(errno));
+                "%s: failed pr_table_add_dup(): %s",
+                 MODULE_NAME, strerror(errno));
             exit(1);
         }
         pr_log_debug(DEBUG2,
-                     "%s: add LMDExplicitModeUser[%d] %s", MODULE_NAME, i, account);
+            "%s: add LMDExplicitModeUser[%d] %s", MODULE_NAME, i, account);
     }
 
     return PR_HANDLED(cmd);
@@ -95,7 +95,7 @@ MODRET set_libmemcached_explicit_mode(cmd_rec *cmd) {
     *((int *) c->argv[0]) = boolean;
 
     pr_log_debug(DEBUG2,
-                 "%s: LMDExplicitMode is %d", MODULE_NAME, boolean);
+        "%s: LMDExplicitMode is %d", MODULE_NAME, boolean);
 
     return PR_HANDLED(cmd);
 }
@@ -127,18 +127,18 @@ MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
         const char *ip = pstrdup(main_server->pool, cmd->argv[i]);
         if(pr_table_exists(allowed_ips, ip) > 0) {
             pr_log_debug(DEBUG2,
-                         "%s: %s is already registerd", MODULE_NAME, ip);
+                "%s: %s is already registerd", MODULE_NAME, ip);
             continue;
         }
 
         if(pr_table_add_dup(allowed_ips, ip, "y", 0) < 0){
             pr_log_pri(PR_LOG_ERR,
-                       "%s: failed pr_table_add_dup(): %s",
-                       MODULE_NAME, strerror(errno));
+              "%s: failed pr_table_add_dup(): %s",
+              MODULE_NAME, strerror(errno));
             exit(1);
         }
         pr_log_debug(DEBUG2,
-                     "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, ip);
+            "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, ip);
     }
 
     return PR_HANDLED(cmd);
@@ -161,12 +161,12 @@ MODRET add_libmemcached_memcached_host(cmd_rec *cmd) {
         rc = memcached_server_push(memcached_deny_mmc, server);
         if(rc != MEMCACHED_SUCCESS){
             pr_log_auth(PR_LOG_ERR,
-                        "Fatal %s: failed memcached_strerror(): %s",
-                        MODULE_NAME, memcached_strerror(memcached_deny_mmc, rc));
+              "Fatal %s: failed memcached_strerror(): %s",
+              MODULE_NAME, memcached_strerror(memcached_deny_mmc, rc));
             exit(1);
         }
         pr_log_debug(DEBUG2,
-                     "%s: add memcached server %s", MODULE_NAME, arg);
+            "%s: add memcached server %s", MODULE_NAME, arg);
     }
     is_set_server = true;
     return PR_HANDLED(cmd);
@@ -175,7 +175,7 @@ MODRET add_libmemcached_memcached_host(cmd_rec *cmd) {
 /* todo */
 static int libmemcached_deny_timeout_callback(CALLBACK_FRAME) {
     pr_log_auth(PR_LOG_WARNING,
-                "%s: memcached timeout", MODULE_NAME);
+        "%s: memcached timeout", MODULE_NAME);
     return 0;
 }
 
@@ -210,8 +210,8 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     if(MEMCACHED_SUCCESS  != rc &&
        MEMCACHED_NOTFOUND != rc) {
         pr_log_auth(PR_LOG_ERR,
-                    "%s: failed memcached_get() %s",
-                    MODULE_NAME, memcached_strerror(mmc, rc));
+            "%s: failed memcached_get() %s",
+           MODULE_NAME, memcached_strerror(mmc, rc));
         return false;
     }
 
@@ -227,15 +227,15 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
         /* compare memacched IP with client hostname */
         if(remote_host && 0 == strcmp(ip_or_hostname, remote_host)) {
             pr_log_debug(DEBUG2,
-                     "%s: memcached hostname '%s' matched with remote host '%s'",
-                     MODULE_NAME,  ip_or_hostname, remote_host);
+               "%s: memcached hostname '%s' matched with remote host '%s'",
+                MODULE_NAME,  ip_or_hostname, remote_host);
             return true;
         }
         /* compare memacched IP with client IP */
         if(0 == strcmp(ip_or_hostname, remote_ip)) {
             pr_log_debug(DEBUG2,
-                     "%s: memcached IP '%s' matched with remote IP '%s'",
-                     MODULE_NAME,  ip_or_hostname, remote_ip);
+               "%s: memcached IP '%s' matched with remote IP '%s'",
+                MODULE_NAME,  ip_or_hostname, remote_ip);
             return true;
         }
     }
@@ -274,7 +274,7 @@ static bool is_explicit_mode_user(const char *account) {
         return false;
 
     pr_log_debug(DEBUG2,
-                 "%s: %s is explicit user", MODULE_NAME, account);
+        "%s: %s is explicit user", MODULE_NAME, account);
 
     return true;
 }
@@ -290,7 +290,7 @@ static bool is_allowed(const char *remote_ip, const char *remote_host) {
     allowed_ips = c->argv[0];
     if(NULL == allowed_ips) {
         pr_log_auth(PR_LOG_ERR,
-                    "%s: pr_table_t is NULL. something fatal", MODULE_NAME);
+          "%s: pr_table_t is NULL. something fatal", MODULE_NAME);
         return false;
     }
 #ifdef DEBUG
@@ -299,13 +299,13 @@ static bool is_allowed(const char *remote_ip, const char *remote_host) {
 
     if(pr_table_exists(allowed_ips, remote_host) > 0) {
          pr_log_auth(PR_LOG_NOTICE,
-            "%s: hostname '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_host);
+             "%s: hostname '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_host);
          return true;
     }
     
     if(pr_table_exists(allowed_ips, remote_ip) > 0) {
          pr_log_auth(PR_LOG_NOTICE,
-            "%s: IP '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_ip);
+             "%s: IP '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_ip);
          return true;
     }
 
@@ -345,7 +345,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     if(is_explicit_mode() && !is_explicit_mode_user(account)) {
         pr_log_auth(PR_LOG_NOTICE,
-                     "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
+           "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
         return PR_DECLINED(cmd);
     }
 
@@ -359,26 +359,26 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     }
 
     pr_log_debug(DEBUG2,
-                "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
+      "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
 
     /* key is <account>@<proftpd IP> */
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
     if(NULL == key) { 
         pr_log_auth(PR_LOG_NOTICE,
-                    "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
+            "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
         pr_response_send(R_530, _("Login denyied (server error)"));
         end_login(0);
     }
 
     if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip, remote_host)) {
         pr_log_auth(PR_LOG_NOTICE,
-                    "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
+            "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
         end_login(0);
     }
 
     pr_log_debug(DEBUG2,
-                 "%s: cache found. '%s' allowed to auth", MODULE_NAME, key);
+        "%s: cache found. '%s' allowed to auth", MODULE_NAME, key);
 
     return PR_DECLINED(cmd);
 }
