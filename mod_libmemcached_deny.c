@@ -372,7 +372,7 @@ static bool is_allowed_from(cmd_rec *cmd,
     return false;
 }
 
-MODRET libmemcached_deny_post_pass(cmd_rec *cmd) {
+MODRET lmd_deny_post_pass(cmd_rec *cmd) {
     /*
       mod_authを通過するまでは session.userは空の様子
       const char *account  = session.user;
@@ -447,7 +447,7 @@ static conftable lmd_deny_conftab[] = {
 };
  
 static cmdtable lmd_deny_cmdtab[] = {
-    { POST_CMD, C_USER, G_NONE, libmemcached_deny_post_pass, FALSE, FALSE, CL_AUTH },
+    { POST_CMD, C_USER, G_NONE, lmd_deny_post_pass, FALSE, FALSE, CL_AUTH },
     { 0, NULL }
 };
 
