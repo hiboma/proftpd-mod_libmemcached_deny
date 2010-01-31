@@ -44,14 +44,28 @@ static void lmd_postparse_ev(const void *event_data, void *user_data) {
     }
 }
 
+static void lmd_restart_ev(const void *event_data, void *user_data) {
+    if(memcached_deny_mmc){
+        memcached_free(memcached_deny_mmc);
+        memcached_deny_mmc = NULL;
+    }
+    /* restartの前にmodule-unloadが呼ばれるのかな? */
+    pr_log_debug(DEBUG5, "%s at core.module-unload", MODULE_NAME);
+}
+
 static int lmd_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
         pr_log_pri(PR_LOG_ERR, "Fatal %s: Out of memory", MODULE_NAME);
         exit(1);
     }
+
     pr_event_register(&libmemcached_deny_module,
         "core.postparse", lmd_postparse_ev, NULL);
+
+    pr_event_register(&libmemcached_deny_module,
+         "core.module-unload", lmd_restart_ev, NULL);
+
     return 0;
 }
 
