@@ -400,12 +400,6 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
 
     /* key is <account>@<proftpd IP> */
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
-    if(NULL == key) {
-        pr_log_auth(PR_LOG_NOTICE,
-            "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
-        pr_response_send(R_530, _("Login denyied (server error)"));
-        end_login(0);
-    }
 
     /* deny explicily */
     if(true == is_denied(memcached_deny_mmc, key)) {
