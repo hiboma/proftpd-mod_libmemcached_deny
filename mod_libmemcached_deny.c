@@ -135,7 +135,7 @@ MODRET add_lmd_explicit_user_regex(cmd_rec *cmd) {
 MODRET add_lmd_allow_from(cmd_rec *cmd) {
     config_rec *c;
     int i;
-    pr_table_t *allowed_ips;
+    array_header *allowed_ips;
 
     if(cmd->argc < 2 )
         CONF_ERROR(cmd, "argument missing");
@@ -148,7 +148,8 @@ MODRET add_lmd_allow_from(cmd_rec *cmd) {
         allowed_ips = c->argv[0];
     } else {
         c = add_config_param(cmd->argv[0], 0, NULL);
-        c->argv[0] = allowed_ips = pr_table_alloc(main_server->pool, 0);
+        c->argv[0] = allowed_ips =
+          make_array(cmd->server->pool, 0, sizeof(char *));
     }
 
     for(i=1; i < cmd->argc; i++) {
@@ -156,19 +157,8 @@ MODRET add_lmd_allow_from(cmd_rec *cmd) {
          *ここでpstrdupしておかないと、１度ログインするとpoolに回収され
          * allowed_ipsのキー一覧 から消えてバグの元になる
          */
-        const char *ip = pstrdup(main_server->pool, cmd->argv[i]);
-        if(pr_table_exists(allowed_ips, ip) > 0) {
-            pr_log_debug(DEBUG2,
-                "%s: %s is already registerd", MODULE_NAME, ip);
-            continue;
-        }
-
-        if(pr_table_add_dup(allowed_ips, ip, "y", 0) < 0){
-            pr_log_pri(PR_LOG_ERR,
-              "%s: failed pr_table_add_dup(): %s",
-              MODULE_NAME, strerror(errno));
-            exit(1);
-        }
+        const char *ip = pstrdup(cmd->server->pool, cmd->argv[i]);
+        *((const char **) push_array(allowed_ips)) = ip;
         pr_log_debug(DEBUG2,
             "%s: add LMDAllowFrom[%d] %s", MODULE_NAME, i, ip);
     }
@@ -336,11 +326,10 @@ static bool is_explicitly_denied(memcached_st *mmc, const char *key) {
     return res;
 }
 
-static bool is_allowed_from(cmd_rec *cmd,
-                            const char *remote_ip,
-                            const char *remote_host) {
+static bool is_allowed_from(cmd_rec *cmd, pr_netaddr_t *na) {
+    int i;
     config_rec *c;
-    pr_table_t *allowed_ips;
+    array_header *allowed_ips;
 
     c = find_config(cmd->server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(NULL == c)
@@ -357,16 +346,21 @@ static bool is_allowed_from(cmd_rec *cmd,
     pr_table_do(allowed_ips, walk_table, NULL, 0);
 #endif
 
-    if(pr_table_exists(allowed_ips, remote_host) > 0) {
-         pr_log_auth(PR_LOG_NOTICE,
-             "%s: hostname '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_host);
-         return true;
-    }
+    char **elts = allowed_ips->elts;
+    for (i = 0; i < allowed_ips->nelts; i++) {
+        const char *pattern = elts[i];
+        if(strcasecmp(pattern, "all") == 0) {
+            pr_log_auth(PR_LOG_NOTICE,
+                "%s: 'LMDAllowFrom all' Skip last process", MODULE_NAME);
+            return true;
+        }
 
-    if(pr_table_exists(allowed_ips, remote_ip) > 0) {
+        if(pr_netaddr_fnmatch(na, pattern,
+             PR_NETADDR_MATCH_DNS|PR_NETADDR_MATCH_IP)){
          pr_log_auth(PR_LOG_NOTICE,
-             "%s: IP '%s' found in LMDAllowFrom. Skip last process", MODULE_NAME, remote_ip);
+             "%s: match with LMDAllowFrom %s Skip last process", MODULE_NAME, pattern);
          return true;
+        }
     }
 
     return false;
@@ -397,7 +391,7 @@ MODRET lmd_deny_post_pass(cmd_rec *cmd) {
     }
 
     /* key is <account>@<proftpd IP> */
-    local_ip  = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
+    local_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
 
     if(is_explicitly_denied(memcached_deny_mmc, key) == true) {
@@ -413,18 +407,14 @@ MODRET lmd_deny_post_pass(cmd_rec *cmd) {
         return PR_DECLINED(cmd);
     }
 
-    /* return IP unless found hostname */
-    remote_host = pr_netaddr_get_sess_remote_name();
-    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
-
     /* allow explicily */
-    if(is_allowed_from(cmd, remote_ip, remote_host) == true) {
+    if(is_allowed_from(cmd, session.c->remote_addr) == true) {
         return PR_DECLINED(cmd);
     }
 
-    pr_log_debug(DEBUG5,
-      "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
-
+    /* return IP unless found hostname */
+    remote_host = pr_netaddr_get_sess_remote_name();
+    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
     if(is_cache_exits(memcached_deny_mmc,key, remote_ip, remote_host) == false) {
         pr_log_auth(PR_LOG_NOTICE,
             "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
