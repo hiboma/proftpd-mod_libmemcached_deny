@@ -388,7 +388,7 @@ MODRET lmd_deny_post_pass(cmd_rec *cmd) {
       mod_authを通過するまでは session.userは空の様子
       const char *account  = session.user;
     */
-    const char *key;
+    const char *key = NULL;
     const char *account   = NULL;
     const char *remote_ip = NULL;
     const char *remote_host = NULL;
