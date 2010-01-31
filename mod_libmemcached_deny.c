@@ -135,7 +135,7 @@ MODRET add_lmd_explicit_user_regex(cmd_rec *cmd) {
 MODRET add_lmd_allow_from(cmd_rec *cmd) {
     config_rec *c;
     int i;
-    array_header *allowed_ips;
+    array_header *allowed_acls;
 
     if(cmd->argc < 2 )
         CONF_ERROR(cmd, "argument missing");
@@ -145,22 +145,23 @@ MODRET add_lmd_allow_from(cmd_rec *cmd) {
     /* argv => LMDMemcachedHost 127.0.0.1 192.168.0.1 ... */
     c = find_config(main_server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(c && c->argv[0]) {
-        allowed_ips = c->argv[0];
+        allowed_acls = c->argv[0];
     } else {
         c = add_config_param(cmd->argv[0], 0, NULL);
-        c->argv[0] = allowed_ips =
+        c->argv[0] = allowed_acls =
           make_array(cmd->server->pool, 0, sizeof(char *));
     }
 
     for(i=1; i < cmd->argc; i++) {
-        /*
-         *ここでpstrdupしておかないと、１度ログインするとpoolに回収され
-         * allowed_ipsのキー一覧 から消えてバグの元になる
-         */
-        const char *ip = pstrdup(cmd->server->pool, cmd->argv[i]);
-        *((const char **) push_array(allowed_ips)) = ip;
+        char *entry = cmd->argv[i];
+        if (strcasecmp(entry, "all") == 0 ||
+            strcasecmp(entry, "none") == 0) {
+            break;
+        }
+        pr_netacl_t *acl = pr_netacl_create(cmd->server->pool, entry);
+        *((pr_netacl_t **) push_array(allowed_acls)) = acl;
         pr_log_debug(DEBUG2,
-            "%s: add LMDAllowFrom[%d] %s", MODULE_NAME, i, ip);
+            "%s: add LMDAllowFrom[%d] %s", MODULE_NAME, i, entry);
     }
 
     return PR_HANDLED(cmd);
@@ -329,37 +330,31 @@ static bool is_explicitly_denied(memcached_st *mmc, const char *key) {
 static bool is_allowed_from(cmd_rec *cmd, pr_netaddr_t *na) {
     int i;
     config_rec *c;
-    array_header *allowed_ips;
+    array_header *allowed_acls;
 
     c = find_config(cmd->server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(NULL == c)
         return false;
 
-    allowed_ips = c->argv[0];
-    if(NULL == allowed_ips) {
+    allowed_acls = c->argv[0];
+    if(NULL == allowed_acls) {
         pr_log_auth(PR_LOG_ERR,
           "%s: pr_table_t is NULL. something fatal", MODULE_NAME);
         return false;
     }
 
 #ifdef DEBUG
-    pr_table_do(allowed_ips, walk_table, NULL, 0);
+    pr_table_do(allowed_acls, walk_table, NULL, 0);
 #endif
 
-    char **elts = allowed_ips->elts;
-    for (i = 0; i < allowed_ips->nelts; i++) {
-        const char *pattern = elts[i];
-        if(strcasecmp(pattern, "all") == 0) {
-            pr_log_auth(PR_LOG_NOTICE,
-                "%s: 'LMDAllowFrom all' Skip last process", MODULE_NAME);
+    pr_netacl_t **elts = allowed_acls->elts;
+    for (i = 0; i < allowed_acls->nelts; i++) {
+        pr_netacl_t *acl = elts[i];
+        if(pr_netacl_match(acl, na) == 1) {
+            pr_log_auth(PR_LOG_INFO,
+                "%s: LMDAllowFrom '%s'. Skip last process",
+                        MODULE_NAME, pr_netacl_get_str(cmd->tmp_pool, acl));
             return true;
-        }
-
-        if(pr_netaddr_fnmatch(na, pattern,
-             PR_NETADDR_MATCH_DNS|PR_NETADDR_MATCH_IP)){
-         pr_log_auth(PR_LOG_NOTICE,
-             "%s: match with LMDAllowFrom %s Skip last process", MODULE_NAME, pattern);
-         return true;
         }
     }
 
