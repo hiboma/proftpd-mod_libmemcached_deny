@@ -30,7 +30,7 @@ static int walk_table(const void *key_data,
 }
 #endif
 
-static void libmemcached_deny_postparse_ev(const void *event_data, void *user_data) {
+static void lmd_postparse_ev(const void *event_data, void *user_data) {
     memcached_stat_st *unused;
     memcached_return_t rc;
 
@@ -45,18 +45,18 @@ static void libmemcached_deny_postparse_ev(const void *event_data, void *user_da
     }
 }
 
-static int libmemcached_deny_init(void) {
+static int lmd_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
         pr_log_pri(PR_LOG_ERR, "Fatal %s: Out of memory", MODULE_NAME);
         exit(1);
     }
     pr_event_register(&libmemcached_deny_module,
-        "core.postparse", libmemcached_deny_postparse_ev, NULL);
+        "core.postparse", lmd_postparse_ev, NULL);
     return 0;
 }
 
-MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
+MODRET add_lmd_explicit_user(cmd_rec *cmd) {
     config_rec *c;
     int i;
     pr_table_t *explicit_users;
@@ -96,7 +96,7 @@ MODRET add_libmemcached_explicit_user(cmd_rec *cmd) {
     return PR_HANDLED(cmd);
 }
 
-MODRET add_libmemcached_explicit_user_regex(cmd_rec *cmd) {
+MODRET add_lmd_explicit_user_regex(cmd_rec *cmd) {
     array_header *list;
     regex_t *preg;
     int i, res;
@@ -133,7 +133,7 @@ MODRET add_libmemcached_explicit_user_regex(cmd_rec *cmd) {
     return PR_HANDLED(cmd);
 }
 
-MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
+MODRET add_lmd_allow_from(cmd_rec *cmd) {
     config_rec *c;
     int i;
     pr_table_t *allowed_ips;
@@ -143,7 +143,7 @@ MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
 
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
-    /* argv => LibMemcachedDenyServer 127.0.0.1 192.168.0.1 ... */
+    /* argv => LMDMemcachedHost 127.0.0.1 192.168.0.1 ... */
     c = find_config(main_server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(c && c->argv[0]) {
         allowed_ips = c->argv[0];
@@ -171,13 +171,13 @@ MODRET add_libmemcached_deny_allow_from(cmd_rec *cmd) {
             exit(1);
         }
         pr_log_debug(DEBUG2,
-            "%s: add LibMemcachedDenyAllowFrom[%d] %s", MODULE_NAME, i, ip);
+            "%s: add LMDAllowFrom[%d] %s", MODULE_NAME, i, ip);
     }
 
     return PR_HANDLED(cmd);
 }
 
-MODRET add_libmemcached_memcached_host(cmd_rec *cmd) {
+MODRET add_lmd_memcached_host(cmd_rec *cmd) {
     int i;
     memcached_return rc;
     memcached_server_st *server = NULL;
@@ -206,7 +206,7 @@ MODRET add_libmemcached_memcached_host(cmd_rec *cmd) {
 }
 
 /* todo */
-static int libmemcached_deny_timeout_callback(CALLBACK_FRAME) {
+static int lmd_timeout_callback(CALLBACK_FRAME) {
     pr_log_auth(PR_LOG_WARNING,
         "%s: memcached timeout", MODULE_NAME);
     return 0;
@@ -219,10 +219,10 @@ static int libmemcached_deny_timeout_callback(CALLBACK_FRAME) {
  *     <account>@<proftpd IP> : <REMOTE_HOST>
  *     <account>@<proftpd IP> : <client IP>\t<REMOTE_HOST> ...
  */
-static bool libmemcached_deny_cache_exits(memcached_st *mmc,
-                                          const char *key,
-                                          const char *remote_ip,
-                                          const char *remote_host) {
+static bool is_cache_exits(memcached_st *mmc,
+                           const char *key,
+                           const char *remote_ip,
+                           const char *remote_host) {
     int timer_id;
     memcached_return rc;
     const char *ip_or_hostname;
@@ -231,7 +231,7 @@ static bool libmemcached_deny_cache_exits(memcached_st *mmc,
     uint32_t flag;
 
     /* todo */
-    timer_id = pr_timer_add(1, -1, NULL, libmemcached_deny_timeout_callback, "memcached_get");
+    timer_id = pr_timer_add(1, -1, NULL, lmd_timeout_callback, "memcached_get");
     cached_value = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
     pr_timer_remove(timer_id, NULL);
 
@@ -310,7 +310,7 @@ static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
     return false;
 }
 
-static bool is_denied(memcached_st *mmc, const char *key) {
+static bool is_explicitly_denied(memcached_st *mmc, const char *key) {
     memcached_return rc;
     char *cached_value;
     size_t value_len;
@@ -371,7 +371,7 @@ static bool is_allowed(const char *remote_ip, const char *remote_host) {
     return false;
 }
 
-MODRET memcached_deny_post_pass(cmd_rec *cmd) {
+MODRET libmemcached_deny_post_pass(cmd_rec *cmd) {
     /*
       mod_authを通過するまでは session.userは空の様子
       const char *account  = session.user;
@@ -401,8 +401,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     /* key is <account>@<proftpd IP> */
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
 
-    /* deny explicily */
-    if(is_denied(memcached_deny_mmc, key) == true) {
+    if(is_explicitly_denied(memcached_deny_mmc, key) == true) {
         pr_log_auth(PR_LOG_INFO,
             "%s: cache 'deny' found for '%s'", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
@@ -426,8 +425,7 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     pr_log_debug(DEBUG5,
       "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
 
-    if(libmemcached_deny_cache_exits(
-          memcached_deny_mmc, key, remote_ip, remote_host) == false) {
+    if(is_cache_exits(memcached_deny_mmc,key, remote_ip, remote_host) == false) {
         pr_log_auth(PR_LOG_NOTICE,
             "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied (cache is expired)"));
@@ -440,17 +438,17 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     return PR_DECLINED(cmd);
 }
 
-static conftable libmemcached_deny_conftab[] = {
-  { "LMDMemcachedHost", add_libmemcached_memcached_host, NULL },
-  { "LMDAllowFrom", add_libmemcached_deny_allow_from, NULL },
-  { "LMDUser", add_libmemcached_explicit_user, NULL },
-  { "LMDUserRegex", add_libmemcached_explicit_user_regex, NULL },
-  { NULL }
+static conftable lmd_deny_conftab[] = {
+    { "LMDUser",          add_lmd_explicit_user,       NULL },
+    { "LMDUserRegex",     add_lmd_explicit_user_regex, NULL },
+    { "LMDAllowFrom",     add_lmd_allow_from,          NULL },
+    { "LMDMemcachedHost", add_lmd_memcached_host,      NULL },
+    { NULL }
 };
  
-static cmdtable libmemcached_deny_cmdtab[] = {
-  { POST_CMD, C_USER,	G_NONE,	 memcached_deny_post_pass,	FALSE,	FALSE, CL_AUTH },
-  { 0, NULL }
+static cmdtable lmd_deny_cmdtab[] = {
+    { POST_CMD, C_USER, G_NONE, libmemcached_deny_post_pass, FALSE, FALSE, CL_AUTH },
+    { 0, NULL }
 };
 
 module libmemcached_deny_module = {
@@ -463,16 +461,16 @@ module libmemcached_deny_module = {
   "libmemcached_deny",
 
   /* Module configuration directive table */
-  libmemcached_deny_conftab,
+  lmd_deny_conftab,
 
   /* Module command handler table */
-  libmemcached_deny_cmdtab,
+  lmd_deny_cmdtab,
 
   /* Module authentication handler table */
   NULL,
 
   /* Module initialization function */
-  libmemcached_deny_init ,
+  lmd_init ,
 
   /* Session initialization function */
   NULL,
