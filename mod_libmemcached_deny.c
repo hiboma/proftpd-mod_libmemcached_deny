@@ -310,6 +310,33 @@ static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
     return false;
 }
 
+static bool is_denied(memcached_st *mmc, const char *key) {
+    memcached_return rc;
+    char *cached_value;
+    size_t value_len;
+    uint32_t flag;
+    bool res = false;
+
+    cached_value = memcached_get(mmc, key, strlen(key), &value_len, &flag, &rc);
+
+    switch(rc) {
+    case MEMCACHED_SUCCESS:
+        if((NULL == cached_value) || (0 == value_len)){
+            break;
+        }
+        if(strcasecmp(cached_value, "deny") == 0) {
+            res = true;
+        }
+    case MEMCACHED_NOTFOUND:
+       break;
+    default:
+        pr_log_auth(PR_LOG_WARNING, "%s: failed memcached_get() %s",
+            MODULE_NAME, memcached_strerror(mmc, rc));
+    }
+
+    return res;
+}
+
 static bool is_allowed(const char *remote_ip, const char *remote_host) {
     config_rec *c;
     pr_table_t *allowed_ips;
@@ -368,32 +395,42 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
+    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
+    local_ip  = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
+
+    /* key is <account>@<proftpd IP> */
+    key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
+    if(NULL == key) {
+        pr_log_auth(PR_LOG_NOTICE,
+            "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
+        pr_response_send(R_530, _("Login denyied (server error)"));
+        end_login(0);
+    }
+
+    /* deny explicily */
+    if(true == is_denied(memcached_deny_mmc, key)) {
+        pr_log_auth(PR_LOG_INFO,
+            "%s: cache 'deny' found for '%s'", MODULE_NAME, key);
+        pr_response_send(R_530, _("Login denyied"));
+        end_login(0);
+    }
+
     if(!is_explicit_mode_user(cmd, account)) {
         pr_log_auth(PR_LOG_NOTICE,
            "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
         return PR_DECLINED(cmd);
     }
 
-    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
-    local_ip  = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
     /* return IP unless found hostname */
     remote_host = pr_netaddr_get_sess_remote_name();
-    
+
+    /* allow explicily */
     if(true == is_allowed(remote_ip, remote_host)) {
         return PR_DECLINED(cmd);
     }
 
-    pr_log_debug(DEBUG2,
+    pr_log_debug(DEBUG5,
       "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
-
-    /* key is <account>@<proftpd IP> */
-    key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
-    if(NULL == key) { 
-        pr_log_auth(PR_LOG_NOTICE,
-            "%s: oops, pstrcat() failed %s", MODULE_NAME, strerror(errno));
-        pr_response_send(R_530, _("Login denyied (server error)"));
-        end_login(0);
-    }
 
     if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip, remote_host)) {
         pr_log_auth(PR_LOG_NOTICE,
