@@ -402,14 +402,14 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
 
     /* deny explicily */
-    if(true == is_denied(memcached_deny_mmc, key)) {
+    if(is_denied(memcached_deny_mmc, key) == true) {
         pr_log_auth(PR_LOG_INFO,
             "%s: cache 'deny' found for '%s'", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied"));
         end_login(0);
     }
 
-    if(!is_explicit_mode_user(cmd, account)) {
+    if(is_explicit_mode_user(cmd, account) == false) {
         pr_log_auth(PR_LOG_NOTICE,
            "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
         return PR_DECLINED(cmd);
@@ -419,14 +419,15 @@ MODRET memcached_deny_post_pass(cmd_rec *cmd) {
     remote_host = pr_netaddr_get_sess_remote_name();
 
     /* allow explicily */
-    if(true == is_allowed(remote_ip, remote_host)) {
+    if(is_allowed(remote_ip, remote_host) == true) {
         return PR_DECLINED(cmd);
     }
 
     pr_log_debug(DEBUG5,
       "%s: '%s' not found in Allowed IP", MODULE_NAME, remote_ip);
 
-    if(false == libmemcached_deny_cache_exits(memcached_deny_mmc, key, remote_ip, remote_host)) {
+    if(libmemcached_deny_cache_exits(
+          memcached_deny_mmc, key, remote_ip, remote_host) == false) {
         pr_log_auth(PR_LOG_NOTICE,
             "%s: memcached IP not found for '%s', Denied", MODULE_NAME, key);
         pr_response_send(R_530, _("Login denyied (cache is expired)"));
