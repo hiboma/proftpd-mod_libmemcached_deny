@@ -1,5 +1,4 @@
 #include "conf.h"
-#include "privs.h"
 #include "libmemcached/memcached.h"
 #include "libmemcached/memcached_util.h"
 
@@ -337,11 +336,13 @@ static bool is_explicitly_denied(memcached_st *mmc, const char *key) {
     return res;
 }
 
-static bool is_allowed(const char *remote_ip, const char *remote_host) {
+static bool is_allowed_from(cmd_rec *cmd,
+                            const char *remote_ip,
+                            const char *remote_host) {
     config_rec *c;
     pr_table_t *allowed_ips;
 
-    c = find_config(main_server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
     if(NULL == c)
         return false;
 
@@ -395,10 +396,8 @@ MODRET libmemcached_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
-    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
-    local_ip  = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
-
     /* key is <account>@<proftpd IP> */
+    local_ip  = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
     key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
 
     if(is_explicitly_denied(memcached_deny_mmc, key) == true) {
@@ -416,9 +415,10 @@ MODRET libmemcached_deny_post_pass(cmd_rec *cmd) {
 
     /* return IP unless found hostname */
     remote_host = pr_netaddr_get_sess_remote_name();
+    remote_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_remote_addr());
 
     /* allow explicily */
-    if(is_allowed(remote_ip, remote_host) == true) {
+    if(is_allowed_from(cmd, remote_ip, remote_host) == true) {
         return PR_DECLINED(cmd);
     }
 
