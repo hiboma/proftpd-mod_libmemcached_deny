@@ -375,15 +375,22 @@ static bool is_allowed(cmd_rec *cmd, pr_netaddr_t *na) {
     return false;
 }
 
+static const char *make_memcached_key(cmd_rec *cmd) {
+    const char *account, *local_ip;
+
+    account = get_param_ptr(cmd->server->conf, C_USER, FALSE);
+    local_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
+    return pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
+}
+
 MODRET lmd_deny_post_pass(cmd_rec *cmd) {
     /*
       mod_authを通過するまでは session.userは空の様子
       const char *account  = session.user;
     */
     const char *key;
-    const char *account   = NULL; 
+    const char *account   = NULL;
     const char *remote_ip = NULL;
-    const char *local_ip = NULL;
     const char *remote_host = NULL;
 
     if(false == is_set_server) {
@@ -392,16 +399,9 @@ MODRET lmd_deny_post_pass(cmd_rec *cmd) {
         return PR_DECLINED(cmd);
     }
 
-    account = get_param_ptr(main_server->conf, C_USER, FALSE);
-    if(NULL == account) {
-        pr_log_auth(PR_LOG_ERR, "unknown account.");
-        pr_response_send(R_530, _("Login denyied (server error)"));
-        end_login(0);
-    }
-
     /* key is <account>@<proftpd IP> */
-    local_ip = pr_netaddr_get_ipstr(pr_netaddr_get_sess_local_addr());
-    key = pstrcat(cmd->tmp_pool, account, "@", local_ip, NULL);
+    key = make_memcached_key(cmd);
+    account = get_param_ptr(cmd->server->conf, C_USER, FALSE);
 
     if(is_explicitly_denied(memcached_deny_mmc, key) == true) {
         pr_log_auth(PR_LOG_INFO,
