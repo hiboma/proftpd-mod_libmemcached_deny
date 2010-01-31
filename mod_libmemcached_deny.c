@@ -55,7 +55,7 @@ static int lmd_init(void) {
     return 0;
 }
 
-MODRET add_lmd_explicit_user(cmd_rec *cmd) {
+MODRET add_lmd_apply_user(cmd_rec *cmd) {
     config_rec *c;
     int i;
     pr_table_t *explicit_users;
@@ -65,8 +65,8 @@ MODRET add_lmd_explicit_user(cmd_rec *cmd) {
 
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
-    /* argv => LMDUser nobody nobody1 nobody2 */
-    c = find_config(main_server->conf, CONF_PARAM, "LMDUser", FALSE);
+    /* argv => LMDApplyUser nobody nobody1 nobody2 */
+    c = find_config(main_server->conf, CONF_PARAM, "LMDApplyUser", FALSE);
     if(c && c->argv[0]) {
         explicit_users = c->argv[0];
     } else {
@@ -89,13 +89,13 @@ MODRET add_lmd_explicit_user(cmd_rec *cmd) {
             exit(1);
         }
         pr_log_debug(DEBUG2,
-            "%s: add LMDUser[%d] %s", MODULE_NAME, i, account);
+            "%s: add LMDApplyUser[%d] %s", MODULE_NAME, i, account);
     }
 
     return PR_HANDLED(cmd);
 }
 
-MODRET add_lmd_explicit_user_regex(cmd_rec *cmd) {
+MODRET add_lmd_apply_user_regex(cmd_rec *cmd) {
     array_header *list;
     regex_t *preg;
     int i, res;
@@ -105,8 +105,8 @@ MODRET add_lmd_explicit_user_regex(cmd_rec *cmd) {
         CONF_ERROR(cmd, "missing argument");
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
-    /* argv => LMDUserRegex ^test */
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDUserRegex", FALSE);
+    /* argv => LMDApplyUserRegex ^test */
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDApplyUserRegex", FALSE);
     if(c && c->argv[0]) {
         list = c->argv[0];
     } else {
@@ -126,7 +126,7 @@ MODRET add_lmd_explicit_user_regex(cmd_rec *cmd) {
         }
         *((regex_t **) push_array(list)) = preg;
         pr_log_debug(DEBUG2,
-            "%s: add LMDUserRegex[%d] %s", MODULE_NAME, i, cmd->argv[i]);
+            "%s: add LMDApplyUserRegex[%d] %s", MODULE_NAME, i, cmd->argv[i]);
     }
 
     return PR_HANDLED(cmd);
@@ -143,7 +143,7 @@ MODRET add_lmd_allow_from(cmd_rec *cmd) {
     CHECK_CONF(cmd, CONF_ROOT|CONF_GLOBAL);
 
     /* argv => LMDMemcachedHost 127.0.0.1 192.168.0.1 ... */
-    c = find_config(main_server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
+    c = find_config(main_server->conf, CONF_PARAM, "LMDAllow", FALSE);
     if(c && c->argv[0]) {
         allowed_acls = c->argv[0];
     } else {
@@ -161,7 +161,7 @@ MODRET add_lmd_allow_from(cmd_rec *cmd) {
         pr_netacl_t *acl = pr_netacl_create(cmd->server->pool, entry);
         *((pr_netacl_t **) push_array(allowed_acls)) = acl;
         pr_log_debug(DEBUG2,
-            "%s: add LMDAllowFrom[%d] %s", MODULE_NAME, i, entry);
+            "%s: add LMDAllow[%d] %s", MODULE_NAME, i, entry);
     }
 
     return PR_HANDLED(cmd);
@@ -266,22 +266,22 @@ static bool is_cache_exits(memcached_st *mmc,
     return false;
 }
 
-static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
+static bool is_applied_user(cmd_rec *cmd, const char *account) {
     config_rec *c;
 
     /* ハッシュテーブルにアカウントがあるか否か */
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDUser", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDApplyUser", FALSE);
     if(c && c->argv[0]) {
         pr_table_t *explicit_users = c->argv[0];
         if(pr_table_exists(explicit_users, account) > 0 ) {
             pr_log_debug(DEBUG2,
-                "%s: %s is found in LMDUser", MODULE_NAME, account);
+                "%s: '%s' found in LMDApplyUser", MODULE_NAME, account);
             return true;
         }
     }
 
     /* 正規表現にマッチするか否か */
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDUserRegex", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDApplyUserRegex", FALSE);
     if(c && c->argv[0]) {
         int i;
         array_header *regex_list = c->argv[0];
@@ -291,7 +291,7 @@ static bool is_explicit_mode_user(cmd_rec *cmd, const char *account) {
             regex_t *preg = elts[i];
             if(regexec(preg, account, 0, NULL, 0) == 0) {
                 pr_log_debug(DEBUG2,
-                    "%s: %s is found in LMDUserRegex", MODULE_NAME, account);
+                    "%s: '%s' found in LMDApplyUserRegex", MODULE_NAME, account);
                 return true;
             }
         }
@@ -327,12 +327,12 @@ static bool is_explicitly_denied(memcached_st *mmc, const char *key) {
     return res;
 }
 
-static bool is_allowed_from(cmd_rec *cmd, pr_netaddr_t *na) {
+static bool is_allowed(cmd_rec *cmd, pr_netaddr_t *na) {
     int i;
     config_rec *c;
     array_header *allowed_acls;
 
-    c = find_config(cmd->server->conf, CONF_PARAM, "LMDAllowFrom", FALSE);
+    c = find_config(cmd->server->conf, CONF_PARAM, "LMDAllow", FALSE);
     if(NULL == c)
         return false;
 
@@ -352,7 +352,7 @@ static bool is_allowed_from(cmd_rec *cmd, pr_netaddr_t *na) {
         pr_netacl_t *acl = elts[i];
         if(pr_netacl_match(acl, na) == 1) {
             pr_log_auth(PR_LOG_INFO,
-                "%s: LMDAllowFrom '%s'. Skip last process",
+                "%s: LMDAllow '%s'. Skip last process",
                         MODULE_NAME, pr_netacl_get_str(cmd->tmp_pool, acl));
             return true;
         }
@@ -396,14 +396,14 @@ MODRET lmd_deny_post_pass(cmd_rec *cmd) {
         end_login(0);
     }
 
-    if(is_explicit_mode_user(cmd, account) == false) {
+    if(is_applied_user(cmd, account) == false) {
         pr_log_auth(PR_LOG_NOTICE,
-           "%s: %s is not registerd as an explicit mode user. Skip last process", MODULE_NAME, account);
+           "%s: %s is not applied user. skip last process", MODULE_NAME, account);
         return PR_DECLINED(cmd);
     }
 
     /* allow explicily */
-    if(is_allowed_from(cmd, session.c->remote_addr) == true) {
+    if(is_allowed(cmd, session.c->remote_addr) == true) {
         return PR_DECLINED(cmd);
     }
 
@@ -424,10 +424,10 @@ MODRET lmd_deny_post_pass(cmd_rec *cmd) {
 }
 
 static conftable lmd_deny_conftab[] = {
-    { "LMDUser",          add_lmd_explicit_user,       NULL },
-    { "LMDUserRegex",     add_lmd_explicit_user_regex, NULL },
-    { "LMDAllowFrom",     add_lmd_allow_from,          NULL },
-    { "LMDMemcachedHost", add_lmd_memcached_host,      NULL },
+    { "LMDApplyUser",      add_lmd_apply_user,       NULL },
+    { "LMDApplyUserRegex", add_lmd_apply_user_regex, NULL },
+    { "LMDAllow",          add_lmd_allow_from,       NULL },
+    { "LMDMemcachedHost",  add_lmd_memcached_host,   NULL },
     { NULL }
 };
  
