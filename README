@@ -19,32 +19,31 @@ usage
         <IfModule mod_libmemcached_deny.c>
            LMDMemcachedHost 127.0.0.1
         </IfModule>
-
         
-    o 192.168.0.1 からのログインはキャッシュを見ないで許可する場合
+    o 192.168.0.1 からのログインはキャッシュがなくても許可する
     
-        LoadModule mod_libmemcached_deny.c
-        <IfModule mod_libmemcached_deny.c>
-           LMDMemcachedHost 127.0.0.1
-           LMDAllowFrom 192.168.0.1    
-        </IfModule>
+        LMDMemcachedHost 127.0.0.1
+        LMDAllow         192.168.0.1    
 
-        
+    o 192.168.0.0のサブネットからのログインはキャッシュがなくても許可する
+
+        LMDMemcachedHost 127.0.0.1
+        LMDAllow         192.168.0.
+
+        # CIDR
+        LMDMemcachedHost 127.0.0.1
+        LMDAllow         192.168.0.0/24
+
     o hogeとfugaユーザーのみ キャッシュ確認する。
     o その他のユーザーは確認しない
         
-        LoadModule mod_libmemcached_deny.c
-        <IfModule mod_libmemcached_deny.c>
-           LMDMemcachedHost 127.0.0.1
-           LMDExplicitMode on
-           LMDExplicitModeUser hoge fuga
-        </IfModule>
+        LMDMemcachedHost 127.0.0.1
+        LMDApplyUser     hoge fuga
 
-    (なんだか変な設定かと思われるかもしれませんが)
-    
-    既に稼働中のシステムが存在し 一度に全体のログインに制限をかける運用が難しい場
-    合に LMDExplicitModeUser を徐々に追加し制限つきアカウントを増やす用途を想定し
-    ています。
+    o 全てのユーザーでキャッシュ確認する      
+
+        LMDMemcachedHost 127.0.0.1
+        LMDApplyUserRegex  .*
 
 ------------
 memcached
