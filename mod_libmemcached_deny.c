@@ -53,6 +53,31 @@ static void lmd_restart_ev(const void *event_data, void *user_data) {
     pr_log_debug(DEBUG5, "%s at core.module-unload", MODULE_NAME);
 }
 
+/*
+
+static void lmd_connect_ev(const void *event_data, void *user_data) {
+    memcached_return rc;
+    char *cached_value;
+    size_t value_len;
+    uint32_t flag;
+    conn_t *conn;
+    const char *key;
+
+    conn = (conn_t *)event_data;
+    key = pr_netaddr_get_ipstr(conn->remote_addr);
+    cached_value = memcached_get(memcached_deny_mmc, key, strlen(key), &value_len, &flag, &rc);
+    if((NULL == cached_value) || (0 == value_len)){
+        return;
+    }
+
+    if(strcasecmp(cached_value, "deny") == 0) {
+        pr_log_pri(PR_LOG_INFO,
+                   "%s: '%s' is denied IP", MODULE_NAME, key);
+    }
+}
+
+*/
+
 static int lmd_init(void) {
     memcached_deny_mmc = memcached_create(NULL);
     if(!memcached_deny_mmc) {
@@ -65,6 +90,11 @@ static int lmd_init(void) {
 
     pr_event_register(&libmemcached_deny_module,
          "core.module-unload", lmd_restart_ev, NULL);
+
+/*
+    pr_event_register(&libmemcached_deny_module,
+         "core.connect", lmd_connect_ev, NULL);
+*/
 
     return 0;
 }
