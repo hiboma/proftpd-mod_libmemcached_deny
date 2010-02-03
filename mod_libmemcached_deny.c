@@ -16,6 +16,7 @@ module libmemcached_deny_module;
 static const int MAX_KEY_LENGTH = _MAX_KEY_LENGTH;
 
 /* rw */
+static bool ignore_memcached_down = false;
 static bool is_set_server = false;
 static memcached_st *memcached_deny_mmc = NULL;
 
@@ -39,8 +40,11 @@ static void lmd_postparse_ev(const void *event_data, void *user_data) {
             "%s: Failed connect to memcached."
             "Please check memcached is alive", MODULE_NAME);
 
-        if(SERVER_INETD == ServerType)
+        if(ignore_memcached_down){
+            return;
+        }else {
             exit(1);
+        }
     }
 }
 
@@ -98,6 +102,24 @@ static int lmd_init(void) {
 
     return 0;
 }
+
+MODRET set_lmd_ignore_memcached_down(cmd_rec *cmd) {
+  int ignore = -1;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
+
+  ignore = get_boolean(cmd, 1);
+  if (ignore == -1)
+    CONF_ERROR(cmd, "expected Boolean parameter");
+
+  if(ignore == TRUE) {
+      ignore_memcached_down = true;
+  }
+
+  return PR_HANDLED(cmd);
+}
+
 
 MODRET add_lmd_apply_user(cmd_rec *cmd) {
     config_rec *c;
@@ -276,10 +298,18 @@ static bool is_cache_exits(memcached_st *mmc,
     /* failed by other reason */
     if(MEMCACHED_SUCCESS  != rc &&
        MEMCACHED_NOTFOUND != rc) {
-        pr_log_auth(PR_LOG_ERR,
-            "%s: failed memcached_get() %s",
-           MODULE_NAME, memcached_strerror(mmc, rc));
-        return false;
+
+        if (ignore_memcached_down == true) {
+            pr_log_auth(PR_LOG_NOTICE,
+                "%s: failed memcached_get() %s. but IGNORE",
+                 MODULE_NAME, memcached_strerror(mmc, rc));
+            return true;
+        } else {
+            pr_log_auth(PR_LOG_ERR,
+                "%s: failed memcached_get() %s",
+                 MODULE_NAME, memcached_strerror(mmc, rc));
+            return false;
+        }
     }
 
     /* cache not fond */
@@ -472,6 +502,7 @@ static conftable lmd_deny_conftab[] = {
     { "LMDApplyUserRegex", add_lmd_apply_user_regex, NULL },
     { "LMDAllow",          add_lmd_allow_from,       NULL },
     { "LMDMemcachedHost",  add_lmd_memcached_host,   NULL },
+    { "LMDIgnoreMemcachedDown",  set_lmd_ignore_memcached_down,  NULL },
     { NULL }
 };
  
