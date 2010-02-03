@@ -320,24 +320,27 @@ static bool is_cache_exits(memcached_st *mmc,
     if(0 == value_len)
         return false;
 
+    bool result = false;
     while((ip_or_hostname = pr_str_get_token(&cached_value, "\t")) != NULL) {
         /* compare memacched IP with client hostname */
         if(remote_host && 0 == strcmp(ip_or_hostname, remote_host)) {
             pr_log_debug(DEBUG2,
                "%s: memcached hostname '%s' matched with remote host '%s'",
                 MODULE_NAME,  ip_or_hostname, remote_host);
-            return true;
+            result = true;
+            break;
         }
         /* compare memacched IP with client IP */
         if(0 == strcmp(ip_or_hostname, remote_ip)) {
             pr_log_debug(DEBUG2,
                "%s: memcached IP '%s' matched with remote IP '%s'",
                 MODULE_NAME,  ip_or_hostname, remote_ip);
-            return true;
+            result = true;
+            break;
         }
     }
-
-    return false;
+    free(cached_value);
+    return result;
 }
 
 static bool is_applied_user(cmd_rec *cmd, const char *account) {
@@ -390,6 +393,7 @@ static bool is_explicitly_denied(memcached_st *mmc, const char *key) {
         }
         if(strcasecmp(cached_value, "deny") == 0) {
             res = true;
+            free(cached_value);
         }
     case MEMCACHED_NOTFOUND:
        break;
